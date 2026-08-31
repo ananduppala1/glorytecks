@@ -300,13 +300,28 @@ export function slug(
 }
 
 /**
- * A stored media URL.
+ * A stored URL field.
  *
- * The scheme/host rules themselves live in utils/mediaUrl and are additionally
- * enforced for every mutating request by `guardMediaUrls`; this exists so the
- * field also appears in the resource's own schema and produces a field-level
- * message rather than a generic one.
+ * The strict rules — https only, plus the media-host allowlist — live in
+ * utils/mediaUrl and are applied to every mutating request by `guardMediaUrls`.
+ * That guard is keyed by FIELD NAME, though, and it only knows the names in
+ * `MEDIA_URL_FIELDS`. Three fields declared here are not on that list —
+ * `linkedin`, `website` and `seo.canonicalUrl` — so for them this builder's
+ * "the scheme is checked elsewhere" claim was simply untrue: they accepted
+ * `javascript:` and were bounded only in length.
+ *
+ * Nothing renders those three as an `href` today, so this was a latent trap
+ * rather than a live hole — but it is the kind that opens the first time
+ * someone adds a "visit profile" link. So the executable-scheme check is made
+ * unconditional here, at the one place every URL field already passes through.
+ *
+ * Deliberately weaker than `checkMediaUrl`: this allows `http://` and
+ * site-relative paths, because a company's website legitimately may not be
+ * https and rejecting it would break real data. It refuses only what can
+ * execute or smuggle a document — which is what the field name promises.
  */
+const EXECUTABLE_URL_SCHEME = /^(?!https?:\/\/)[a-z0-9+.-]*:/i;
+
 export function urlField(field: string, opts: { label?: string } = {}): ValidationChain {
   const { label = field } = opts;
   return body(field)
@@ -316,7 +331,21 @@ export function urlField(field: string, opts: { label?: string } = {}): Validati
     .bail()
     .trim()
     .isLength({ max: LIMITS.URL })
-    .withMessage(`${label} must be at most ${LIMITS.URL} characters`);
+    .withMessage(`${label} must be at most ${LIMITS.URL} characters`)
+    .bail()
+    .custom((value: string) => {
+      if (value === '') return true;
+      // Strip what a browser ignores but a prefix test does not: a scheme
+      // split by a tab or a zero-width space is still honoured.
+      const probe = value.replace(/[\s\u0000-\u0020\u007f-\u009f\u200b-\u200f\u202a-\u202e\ufeff]/g, '');
+      if (probe.startsWith('//')) {
+        throw new Error(`${label} must not be protocol-relative`);
+      }
+      if (EXECUTABLE_URL_SCHEME.test(probe)) {
+        throw new Error(`${label} must be an http(s) URL or a site path`);
+      }
+      return true;
+    });
 }
 
 /* ────────────────────────────────────────────────────────────────────────── *

@@ -455,6 +455,42 @@ test('the course form payload is still accepted', async () => {
   assert.ok(accepted(res), `the course form payload must pass, got ${res.status}: ${res.raw}`);
 });
 
+/**
+ * `urlField` documents itself as scheme-checked "elsewhere" — by
+ * `guardMediaUrls`. That guard is keyed by field NAME, and three fields built
+ * with `urlField` are not in `MEDIA_URL_FIELDS`: `linkedin`, `website` and
+ * `seo.canonicalUrl`. For those the promise did not hold.
+ */
+test('every urlField refuses an executable scheme, including the non-media ones', async () => {
+  actingAs('admin');
+  const cases: Array<[string, string, Record<string, unknown>]> = [
+    ['/trainers', 'POST', { name: 'T', title: 'X', linkedin: 'javascript:alert(1)' }],
+    ['/companies', 'POST', { name: 'C', website: 'javascript:alert(1)' }],
+    ['/settings', 'PUT', { seo: { canonicalUrl: 'javascript:alert(1)' } }],
+    ['/trainers', 'POST', { name: 'T', title: 'X', linkedin: 'vbscript:msgbox(1)' }],
+    ['/companies', 'POST', { name: 'C', website: '//evil.test' }],
+  ];
+  for (const [path, method, body] of cases) {
+    const res = await call(path, { method, body });
+    assert.ok(rejected(res), `${path} ${JSON.stringify(body)} must be refused, got ${res.status}`);
+  }
+});
+
+test('urlField still accepts http, https and site paths', async () => {
+  actingAs('admin');
+  const cases: Array<[string, string, Record<string, unknown>]> = [
+    ['/trainers', 'POST', { name: 'T', title: 'X', linkedin: 'https://linkedin.com/in/x' }],
+    // http is deliberately still allowed: a company site legitimately may not
+    // be https, and rejecting it would break real rows.
+    ['/companies', 'POST', { name: 'C', website: 'http://example.com' }],
+    ['/settings', 'PUT', { seo: { canonicalUrl: 'https://glorytecks.com/x' } }],
+  ];
+  for (const [path, method, body] of cases) {
+    const res = await call(path, { method, body });
+    assert.ok(accepted(res), `${path} ${JSON.stringify(body)} must pass, got ${res.status}: ${res.raw}`);
+  }
+});
+
 test('the settings page payload, including its unmapped groups, is accepted', async () => {
   actingAs('admin');
   const res = await call('/settings', {
@@ -480,6 +516,71 @@ test('the settings page payload, including its unmapped groups, is accepted', as
   assert.ok(accepted(res), `the settings payload must pass, got ${res.status}: ${res.raw}`);
 });
 
+/**
+ * `social` and `heroSection` are not flat columns, so an earlier comment on
+ * the validator described them as discarded by the column mapper. They are
+ * not: `settingsTable` declares a codec for each, so `social.facebook` lands
+ * in `social_facebook` and `heroSection.secondaryCta.link` in
+ * `hero_secondary_cta_link` — and the marketing site renders both as `href`s.
+ */
+test('settings link fields rendered as hrefs refuse an executable scheme', async () => {
+  actingAs('admin');
+  const hostile = ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', '//evil.test'];
+
+  for (const value of hostile) {
+    for (const payload of [
+      { social: { facebook: value } },
+      { social: { twitter: value } },
+      { heroSection: { primaryCta: { link: value } } },
+      { heroSection: { secondaryCta: { link: value } } },
+    ]) {
+      const res = await call('/settings', { method: 'PUT', body: payload });
+      assert.ok(
+        rejected(res),
+        `${JSON.stringify(payload)} must be refused, got ${res.status}: ${res.raw}`,
+      );
+    }
+  }
+});
+
+test('the homepage hero section is bounded, not just "an object"', async () => {
+  actingAs('admin');
+  const oversized = [
+    { heroSection: { description: 'A'.repeat(100_000) } },
+    { heroSection: { headingLine1: 'A'.repeat(5_000) } },
+    { heroSection: { badges: Array(500).fill('x') } },
+  ];
+  for (const body of oversized) {
+    const res = await call('/settings', { method: 'PUT', body });
+    assert.ok(rejected(res), `${Object.keys(body.heroSection)[0]} must be bounded, got ${res.status}`);
+  }
+});
+
+test('a legitimate hero section and social block still save', async () => {
+  actingAs('admin');
+  const res = await call('/settings', {
+    method: 'PUT',
+    body: {
+      social: { facebook: 'https://facebook.com/glorytecks', twitter: '' },
+      heroSection: {
+        badge: 'New',
+        headingLine1: 'Learn',
+        headingHighlight: 'Data Science',
+        description: 'Short description',
+        badges: ['Placement', 'Live'],
+        trustPoints: ['1000+ alumni'],
+        primaryCta: { text: 'Book a demo', link: '/contact' },
+        secondaryCta: { text: 'Explore', link: '/courses' },
+        whatsappText: 'WhatsApp Us',
+        heroImage: 'https://res.cloudinary.com/hero.png',
+        heroImageAlt: 'Students',
+        overlayCard: { label: 'Placed', value: '1200', suffix: '+' },
+      },
+    },
+  });
+  assert.ok(accepted(res), `the hero payload must pass, got ${res.status}: ${res.raw}`);
+});
+
 test('the about page payload is accepted', async () => {
   actingAs('admin');
   const res = await call('/about', {
@@ -496,6 +597,47 @@ test('the about page payload is accepted', async () => {
     },
   });
   assert.ok(accepted(res), `the about payload must pass, got ${res.status}: ${res.raw}`);
+});
+
+/**
+ * The About page's three link fields become `href`s on the public marketing
+ * site. They are not media fields, so `guardMediaUrls` never sees them — which
+ * left them bounded but not scheme-checked, and an admin-authored
+ * `javascript:` value renders as a live link for every visitor.
+ */
+test('About page CTA links refuse an executable scheme', async () => {
+  actingAs('admin');
+  const hostile = [
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'vbscript:msgbox(1)',
+    '//evil.test/x',
+  ];
+
+  for (const value of hostile) {
+    for (const payload of [
+      { hero: { primaryCtaLink: value } },
+      { hero: { secondaryCtaLink: value } },
+      { cta: { buttonLink: value } },
+    ]) {
+      const res = await call('/about', { method: 'PUT', body: payload });
+      assert.ok(
+        rejected(res),
+        `${JSON.stringify(payload)} must be refused, got ${res.status}: ${res.raw}`,
+      );
+    }
+  }
+});
+
+test('About page CTA links still accept a site path or an https URL', async () => {
+  actingAs('admin');
+  for (const value of ['/courses', '/contact', 'https://partner.example.com/page', '']) {
+    const res = await call('/about', {
+      method: 'PUT',
+      body: { hero: { primaryCtaLink: value }, cta: { buttonLink: value } },
+    });
+    assert.ok(accepted(res), `"${value}" must be allowed, got ${res.status}: ${res.raw}`);
+  }
 });
 
 test('generic resource forms that submit unmapped legacy fields still save', async () => {

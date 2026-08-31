@@ -7,6 +7,7 @@ import {
   dropFields,
   SERVER_OWNED_FIELDS,
   objArray,
+  strArray,
 } from './common';
 
 /**
@@ -38,23 +39,69 @@ const externalUrl = (field: string, label: string) =>
       return true;
     });
 
+/**
+ * A navigation target the marketing site renders into an `href`.
+ *
+ * Distinct from `externalUrl` (which demands an absolute https URL, because a
+ * map embed has no other sensible form) and from the media fields (which are
+ * additionally held to the Cloudinary host allowlist by `guardMediaUrls`).
+ * A CTA button legitimately points at an in-app path — `/courses` is the
+ * default — or out to an https page, so both are allowed and nothing else is.
+ *
+ * These fields were previously bounded but not scheme-checked, which left
+ * `javascript:` and `data:text/html` storable. They are not media fields, so
+ * `guardMediaUrls` never saw them; and the site renders them directly into a
+ * <Link href>. That made an admin-authored value a stored XSS on a public
+ * page — the same hole `utils/mediaUrl` closes for image and brochure columns,
+ * on the one class of URL field it does not cover.
+ *
+ * Protocol-relative (`//evil.test`) is rejected explicitly: it is a remote URL
+ * that a naive "starts with /" check reads as same-origin.
+ */
+const navLink = (field: string, label: string) =>
+  body(field)
+    .optional({ values: 'null' })
+    .isString()
+    .withMessage(`${label} must be text`)
+    .bail()
+    .trim()
+    .isLength({ max: LIMITS.URL })
+    .withMessage(`${label} must be at most ${LIMITS.URL} characters`)
+    .custom((value: string) => {
+      if (value === '') return true;
+      // Whitespace and control characters are how a scheme gets past a prefix
+      // test while browsers still honour it.
+      const probe = value.replace(/[\s\u0000-\u0020\u007f-\u009f\u200b-\u200f\u202a-\u202e\ufeff]/g, '');
+      if (probe.startsWith('//')) {
+        throw new Error(`${label} must not be protocol-relative`);
+      }
+      if (probe.startsWith('/')) return true;
+      if (/^https:\/\/[^\s]+$/i.test(probe)) return true;
+      throw new Error(`${label} must be a site path (/courses) or an https URL`);
+    });
+
 const SETTINGS_FIELDS = [
   'siteName', 'tagline', 'phone', 'whatsapp', 'email', 'address', 'mapUrl',
   'homepageVideoUrl', 'announcementText', 'logo', 'defaultOgImage',
 ] as const;
 
 /**
- * Groups the Settings page submits that the `settings` table has no column
- * for — `social`, `stats`, `seo`, `heroSection`. They are dropped by the
- * column mapper today, exactly as `timing` is on a batch, so the page appears
- * to save them and does not.
+ * Groups the Settings page submits as nested objects rather than flat columns.
  *
- * Tolerated rather than rejected: refusing them would break the Settings page
- * outright, and the underlying problem is a missing column, not a hostile
- * request. Their contents are still bounded below so a tolerated field cannot
- * become an unbounded one.
+ * They are NOT unmapped: `settingsTable` declares a codec for each of them
+ * (`socialCodec`, `siteStatsCodec`, `seoCodec`, `heroSectionCodec`), and
+ * `apiToRow` runs every codec — so `{ social: { facebook } }` is written to
+ * `social_facebook`, and `{ heroSection: { secondaryCta: { link } } }` to
+ * `hero_secondary_cta_link`. An earlier comment here described them as
+ * discarded by the mapper; that was wrong, and the mistake mattered — it is
+ * why the leaves below were left with a catch-all length rule and no scheme
+ * check, while the marketing site renders several of them as `href`s.
+ *
+ * They are listed here only so `noUnknownFields` tolerates the group NAME:
+ * the group is not itself a column, so it cannot appear in SETTINGS_FIELDS.
+ * Every leaf inside is validated explicitly below.
  */
-const SETTINGS_UNMAPPED_GROUPS = ['social', 'stats', 'seo', 'heroSection'] as const;
+const SETTINGS_NESTED_GROUPS = ['social', 'stats', 'seo', 'heroSection'] as const;
 
 export const updateSettingsValidator = [
   dropFields(SERVER_OWNED_FIELDS),
@@ -77,9 +124,10 @@ export const updateSettingsValidator = [
   urlField('logo'),
   urlField('defaultOgImage'),
 
-  // Bounded even though unmapped: they are still parsed, walked and echoed.
+  // Every social value becomes an `href` on the public footer, so each is
+  // scheme-checked rather than merely length-bounded.
   body('social').optional({ values: 'null' }).isObject().withMessage('Social links must be an object'),
-  body('social.*').optional({ values: 'null' }).isString().trim().isLength({ max: LIMITS.URL }),
+  navLink('social.*', 'Social link'),
   body('stats').optional({ values: 'null' }).isObject().withMessage('Stats must be an object'),
   body('stats.*').optional({ values: 'null' }).isString().trim().isLength({ max: 60 }),
   body('seo').optional({ values: 'null' }).isObject().withMessage('SEO must be an object'),
@@ -87,9 +135,35 @@ export const updateSettingsValidator = [
   str('seo.metaDescription', { max: LIMITS.SUMMARY }),
   urlField('seo.ogImage'),
   urlField('seo.canonicalUrl'),
-  body('heroSection').optional({ values: 'null' }).isObject(),
 
-  noUnknownFields(SETTINGS_FIELDS, [...SERVER_OWNED_FIELDS, ...SETTINGS_UNMAPPED_GROUPS]),
+  // heroSection is the homepage banner every visitor loads. It previously had
+  // no rule beyond "is an object", so its leaves were both unbounded and
+  // unchecked — including the two CTA links the page renders as `href`s.
+  body('heroSection').optional({ values: 'null' }).isObject(),
+  str('heroSection.badge', { max: LIMITS.LABEL }),
+  str('heroSection.headingLine1', { max: LIMITS.TITLE }),
+  str('heroSection.headingHighlight', { max: LIMITS.TITLE }),
+  str('heroSection.headingLine2', { max: LIMITS.TITLE }),
+  str('heroSection.description', { max: LIMITS.TEXT }),
+  str('heroSection.whatsappText', { max: LIMITS.SUMMARY }),
+  str('heroSection.heroImageAlt', { max: LIMITS.LABEL }),
+  ...strArray('heroSection.badges', { maxItems: LIMITS.LIST_ITEMS, label: 'Hero badges' }),
+  ...strArray('heroSection.trustPoints', { maxItems: LIMITS.LIST_ITEMS, label: 'Hero trust points' }),
+  body('heroSection.primaryCta').optional({ values: 'null' }).isObject(),
+  str('heroSection.primaryCta.text', { max: LIMITS.LABEL }),
+  navLink('heroSection.primaryCta.link', 'Hero primary CTA link'),
+  body('heroSection.secondaryCta').optional({ values: 'null' }).isObject(),
+  str('heroSection.secondaryCta.text', { max: LIMITS.LABEL }),
+  navLink('heroSection.secondaryCta.link', 'Hero secondary CTA link'),
+  body('heroSection.overlayCard').optional({ values: 'null' }).isObject(),
+  str('heroSection.overlayCard.label', { max: LIMITS.LABEL }),
+  str('heroSection.overlayCard.value', { max: 60 }),
+  str('heroSection.overlayCard.suffix', { max: 60 }),
+  // `heroImage` is a media field, so `guardMediaUrls` additionally holds it to
+  // the host allowlist; this gives it a field-level message too.
+  urlField('heroSection.heroImage'),
+
+  noUnknownFields(SETTINGS_FIELDS, [...SERVER_OWNED_FIELDS, ...SETTINGS_NESTED_GROUPS]),
 ];
 
 const ABOUT_FIELDS = ['sections', 'stats'] as const;
@@ -123,11 +197,15 @@ export const updateAboutValidator = [
   body('hero.image').optional().isString().trim().isLength({ max: LIMITS.URL }),
   body('hero.imageAlt').optional().isString().trim().isLength({ max: LIMITS.LABEL }),
   body('hero.primaryCtaText').optional().isString().trim().isLength({ max: LIMITS.LABEL }),
-  body('hero.primaryCtaLink').optional().isString().trim().isLength({ max: LIMITS.URL }),
+  navLink('hero.primaryCtaLink', 'Primary CTA link'),
   body('hero.secondaryCtaText').optional().isString().trim().isLength({ max: LIMITS.LABEL }),
-  body('hero.secondaryCtaLink').optional().isString().trim().isLength({ max: LIMITS.URL }),
+  navLink('hero.secondaryCtaLink', 'Secondary CTA link'),
   body('cta').optional({ values: 'null' }).isObject(),
+  // The catch-all keeps every `cta` member bounded (heading, description,
+  // buttonText); `buttonLink` is the one that becomes an href, so it also gets
+  // the scheme check.
   body('cta.*').optional({ values: 'null' }).isString().trim().isLength({ max: LIMITS.URL }),
+  navLink('cta.buttonLink', 'CTA button link'),
   body('seo').optional({ values: 'null' }).isObject(),
 
   noUnknownFields(ABOUT_FIELDS, [...SERVER_OWNED_FIELDS, ...ABOUT_UNMAPPED_GROUPS]),

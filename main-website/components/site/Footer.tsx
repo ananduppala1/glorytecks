@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { safeUrl } from "@/lib/safeUrl";
 import { Facebook, Instagram, Linkedin, Twitter, Youtube, Mail, Phone, MapPin, ArrowRight } from "lucide-react";
 import Logo from "./Logo";
 import {
@@ -40,7 +41,7 @@ const Footer = () => {
     (l) => courseTitleBySlug.has(l.courseSlug) && localityNameBySlug.has(l.localitySlug),
   );
 
-  const socialLinks = SOCIAL_ICONS.map((s) => ({ ...s, href: social?.[s.key] })).filter(
+  const socialLinks = SOCIAL_ICONS.map((s) => ({ ...s, href: safeUrl(social?.[s.key]) })).filter(
     (s) => !!s.href,
   );
 

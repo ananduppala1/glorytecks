@@ -338,6 +338,46 @@ test('admin writes are limited per account', async () => {
   mock.restoreAll();
 });
 
+/**
+ * The self-service profile update is an authenticated write like any other, so
+ * it gets the same per-account budget. It previously had none: the only ceiling
+ * was the global per-IP limiter, which one credential can step around simply by
+ * changing address — the exact property the account-scoped budget exists for.
+ */
+test('the self-service profile write is limited per account', async () => {
+  asAdmin();
+  const statuses = await repeat(6, (i) =>
+    call('/auth/profile', {
+      method: 'PATCH',
+      auth: true,
+      ip: '203.0.113.77',
+      body: { name: `Renamed ${i}` },
+    }),
+  );
+  assert.ok(
+    statuses.includes(429),
+    `the profile write must be limited, got ${statuses.join(',')}`,
+  );
+  mock.restoreAll();
+});
+
+test('the profile write budget follows the account across addresses', async () => {
+  asAdmin();
+  const statuses = await repeat(6, (i) =>
+    call('/auth/profile', {
+      method: 'PATCH',
+      auth: true,
+      ip: `198.51.100.${20 + i}`,
+      body: { name: `Renamed ${i}` },
+    }),
+  );
+  assert.ok(
+    statuses.includes(429),
+    `moving address must not mint a fresh budget, got ${statuses.join(',')}`,
+  );
+  mock.restoreAll();
+});
+
 test('an admin write limit follows the account, not the address', async () => {
   asAdmin();
   // Same token, different addresses: a compromised session must not get a

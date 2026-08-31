@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/SafeImage";
 import type { AboutContent, AboutSection, AboutStat } from "@/types/content";
+import { safeUrl } from "@/lib/safeUrl";
 
 /* LOCAL IMAGES — used as fallbacks so the page looks identical before any edits */
 import about1 from "@/assets/about1.webp";
@@ -114,14 +115,14 @@ const AboutView = ({ about }: { about: AboutContent | null }) => {
 
             <div className="flex flex-wrap gap-4 mt-8">
               <Button asChild variant="hero" size="lg">
-                <Link href={hero?.primaryCtaLink || "/courses"}>
+                <Link href={safeUrl(hero?.primaryCtaLink) || "/courses"}>
                   {hero?.primaryCtaText || "Explore Courses"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
 
               <Button asChild variant="outline" size="lg">
-                <Link href={hero?.secondaryCtaLink || "/contact"}>
+                <Link href={safeUrl(hero?.secondaryCtaLink) || "/contact"}>
                   {hero?.secondaryCtaText || "Talk to Counselor"}
                 </Link>
               </Button>
@@ -288,7 +289,7 @@ const AboutView = ({ about }: { about: AboutContent | null }) => {
 
           <div className="mt-8">
             <Button asChild size="lg" variant="secondary">
-              <Link href={cta?.buttonLink || "/contact"}>
+              <Link href={safeUrl(cta?.buttonLink) || "/contact"}>
                 {cta?.buttonText || "Get Started"}
               </Link>
             </Button>

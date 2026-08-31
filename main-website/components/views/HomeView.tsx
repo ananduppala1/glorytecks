@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { safeUrl } from "@/lib/safeUrl";
 import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
@@ -202,7 +203,7 @@ const HomeView = ({
                 <Calendar className="h-4 w-4" /> {settings?.heroSection?.primaryCta?.text ?? "Book Free Demo"}
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href={settings?.heroSection?.secondaryCta?.link ?? "/courses"}>
+                <Link href={safeUrl(settings?.heroSection?.secondaryCta?.link) ?? "/courses"}>
                   {settings?.heroSection?.secondaryCta?.text ?? "Explore Courses"} <ArrowRight className="h-4 w-4 ml-1" />
                 </Link>
               </Button>

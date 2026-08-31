@@ -6,6 +6,7 @@ import {
   loginProtection,
   refreshLimiter,
   passwordChangeLimiter,
+  adminWriteLimiter,
 } from '../middlewares/rateLimit';
 import {
   loginValidator,
@@ -32,7 +33,17 @@ router.post('/login', ...loginProtection, validate(loginValidator), authControll
 router.post('/refresh', refreshLimiter, requireJsonRequest, authController.refresh);
 router.post('/logout', requireAuth, authController.logout);
 router.get('/me', requireAuth, authController.me);
-router.patch('/profile', requireAuth, validate(updateProfileValidator), authController.updateProfile);
+// The per-account write budget, as on every other authenticated write. It was
+// the one that had none: the only ceiling was the global per-IP limiter, and an
+// IP ceiling is precisely what a single credential can step around by moving
+// address — which is why every other mutation here is keyed to the account.
+router.patch(
+  '/profile',
+  requireAuth,
+  adminWriteLimiter,
+  validate(updateProfileValidator),
+  authController.updateProfile,
+);
 router.post(
   '/change-password',
   requireAuth,
