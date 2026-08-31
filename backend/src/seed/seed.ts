@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { env, isWeakSecret } from '../config/env';
 import { ROLES, CONTENT_STATUS, BatchMode } from '../constants';
 import { authService } from '../services/auth.service';
 import {
@@ -72,6 +72,13 @@ async function upsertBy<T>(
 
 async function seedAdmin(): Promise<void> {
   const { name, email, password } = env.seedAdmin;
+  if (isWeakSecret(password)) {
+    throw new Error(
+      'SEED_ADMIN_PASSWORD is not set, or is too weak / a known default. ' +
+        'Set it to a unique value of at least 12 characters before seeding — ' +
+        'it becomes a real administrator password.',
+    );
+  }
   const existing = await adminUserRepo.exists({ email: email.toLowerCase() });
   if (!existing) {
     await authService.createAdminUser({ name, email, password, role: ROLES.ADMIN });

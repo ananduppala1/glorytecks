@@ -29,6 +29,81 @@ const required = (key: string, fallback?: string): string => {
   return value;
 };
 
+/**
+ * Values that must never be accepted as a real secret.
+ *
+ * A "missing variable" check is only half the guard, and it is the half that
+ * catches the mistake nobody makes twice. The one that actually happens is a
+ * developer's `.env` — carrying the documented dev fallback — being copied to
+ * a server, or a placeholder from `.env.example` being pasted into a hosting
+ * dashboard. The variable is then present, non-empty, and completely public.
+ *
+ * These are compared case-insensitively and are deliberately the same strings
+ * this file and the examples publish.
+ */
+const KNOWN_WEAK_SECRETS = new Set(
+  [
+    'dev_cookie_secret',
+    'changeme',
+    'change_me',
+    'changeme@12345',
+    'secret',
+    'mysecret',
+    'password',
+    'test',
+    'test-cookie-secret',
+    'placeholder',
+    'your-secret-here',
+    'replace-me',
+  ].map((v) => v.toLowerCase()),
+);
+
+/** Shortest secret we are prepared to call a secret in production. */
+const MIN_SECRET_LENGTH = 32;
+
+/**
+ * A high-entropy secret: required in production, and required to be *credible*.
+ *
+ * The distinction from `required()` matters. `required()` asks "is it set?";
+ * this asks "is it a secret?" — because a present-but-guessable value fails
+ * open in the worst way: everything boots, every test passes, and the signing
+ * key is a word from a README.
+ *
+ * Generate one with: `openssl rand -base64 48`
+ */
+const secret = (key: string, devFallback: string): string => {
+  const isProd = process.env.NODE_ENV === 'production';
+  const raw = process.env[key];
+
+  if (!isProd) return raw && raw !== '' ? raw : devFallback;
+
+  if (!raw || raw === '') {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  if (KNOWN_WEAK_SECRETS.has(raw.toLowerCase())) {
+    throw new Error(
+      `${key} is set to a known default/example value. Generate a real one ` +
+        '(openssl rand -base64 48) and set it in the hosting platform.',
+    );
+  }
+  if (raw.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `${key} must be at least ${MIN_SECRET_LENGTH} characters in production ` +
+        `(currently ${raw.length}). Generate one with: openssl rand -base64 48`,
+    );
+  }
+  return raw;
+};
+
+/**
+ * Is this value safe to use as a bootstrap password?
+ *
+ * Exported so the seed scripts can refuse to run rather than quietly creating
+ * an administrator whose password is published in this repository.
+ */
+export const isWeakSecret = (value: string | undefined): boolean =>
+  !value || value.length < 12 || KNOWN_WEAK_SECRETS.has(value.toLowerCase());
+
 const toNumber = (value: string | undefined, fallback: number): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -70,10 +145,30 @@ export const env = {
     },
   },
 
+  /**
+   * Refresh-token cookie.
+   *
+   * `httpOnly` is set at the call site and is not configurable — the whole
+   * point of the cookie is that frontend JavaScript cannot read it.
+   *
+   * `secure` is FORCED ON in production rather than merely defaulted. It is a
+   * boolean read from a string, so `COOKIE_SECURE` being absent, misspelt or
+   * left at a development `false` silently ships a refresh token over
+   * plaintext HTTP — a failure with no symptom until someone is on the wrong
+   * network. There is no legitimate production configuration where it is off.
+   */
   cookie: {
-    secret: required('COOKIE_SECRET', 'dev_cookie_secret'),
-    secure: process.env.COOKIE_SECURE === 'true',
-    sameSite: (process.env.COOKIE_SAMESITE ?? 'lax') as 'lax' | 'strict' | 'none',
+    secret: secret('COOKIE_SECRET', 'dev_cookie_secret'),
+    secure: process.env.NODE_ENV === 'production' ? true : process.env.COOKIE_SECURE === 'true',
+    sameSite: ((): 'lax' | 'strict' | 'none' => {
+      const value = (process.env.COOKIE_SAMESITE ?? 'lax') as 'lax' | 'strict' | 'none';
+      // `SameSite=None` is meaningless — and rejected by browsers — without
+      // Secure. Refuse rather than emit a cookie every browser will drop.
+      if (value === 'none' && process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE === 'false') {
+        throw new Error('COOKIE_SAMESITE=none requires a secure cookie; browsers reject it otherwise.');
+      }
+      return value;
+    })(),
   },
 
   cors: {
@@ -341,10 +436,19 @@ export const env = {
     enabled: process.env.CACHE_ENABLED !== 'false',
   },
 
+  /**
+   * Bootstrap account details for the seed scripts.
+   *
+   * `password` has NO fallback, on purpose. It previously defaulted to a value
+   * printed in this file, in `.env.example` and in the README — so running
+   * `npm run seed:admin` against a production project created an administrator
+   * whose password was public. The seed scripts now refuse to run without an
+   * explicit one (see isWeakSecret).
+   */
   seedAdmin: {
     name: process.env.SEED_ADMIN_NAME ?? 'GloryTecks Admin',
     email: process.env.SEED_ADMIN_EMAIL ?? 'admin@glorytecks.com',
-    password: process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe@12345',
+    password: process.env.SEED_ADMIN_PASSWORD ?? '',
   },
 
   logLevel: process.env.LOG_LEVEL ?? 'info',

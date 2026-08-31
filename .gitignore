@@ -1,4 +1,36 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+# Real environment files, never committed.
 .env
-.env.example
-node_modules
+.env.*
+!.env.example
+!.env.*.example
+
+# Credential material of any kind. These patterns are deliberately broad: the
+# cost of an ignored file that should have been committed is a moment's
+# confusion, and the cost of the reverse is a rotation.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+*credentials*.json
+*service-account*.json
+secrets.*
 data.txt
+
+# ── Dependencies and build output ────────────────────────────────────────────
+node_modules
+dist
+build
+out
+.next
+coverage
+*.tsbuildinfo
+
+# ── Local tooling ────────────────────────────────────────────────────────────
+.vercel
+.DS_Store
+*.log
+logs/
+.vite
