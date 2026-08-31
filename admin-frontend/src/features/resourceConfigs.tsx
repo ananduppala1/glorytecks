@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { truncate } from '@/lib/utils';
+import { safeAssetUrl } from '@/lib/safeUrl';
 import type { ResourceConfig } from '@/features/formTypes';
 import type {
   BlogCategory,
@@ -406,7 +407,23 @@ export const brochureConfig: ResourceConfig<Brochure> = {
   columns: [
     { key: 'title', header: 'Title', sortable: true, render: (b) => <span className="font-medium">{b.title}</span> },
     { key: 'courseSlug', header: 'Course', render: (b) => b.courseSlug || '—' },
-    { key: 'fileUrl', header: 'File', render: (b) => (b.fileUrl ? <a href={b.fileUrl} target="_blank" rel="noreferrer" className="text-primary underline">Download</a> : '—') },
+    {
+      key: 'fileUrl',
+      header: 'File',
+      // The URL comes from the database, so its scheme is checked before it
+      // becomes an href — a stored `javascript:` URI would otherwise run in
+      // the admin SPA when a colleague clicks "Download".
+      render: (b) => {
+        const href = safeAssetUrl(b.fileUrl);
+        return href ? (
+          <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline">
+            Download
+          </a>
+        ) : (
+          '—'
+        );
+      },
+    },
     { key: 'isActive', header: 'Status', render: (b) => activeCell(b.isActive) },
   ],
   fields: [

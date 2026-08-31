@@ -99,6 +99,119 @@ export const env = {
     windowMs: toNumber(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     max: toNumber(process.env.RATE_LIMIT_MAX, 300),
     authMax: toNumber(process.env.AUTH_RATE_LIMIT_MAX, 20),
+    uploadWindowMs: toNumber(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    uploadMax: toNumber(process.env.UPLOAD_RATE_LIMIT_MAX, 60),
+    publicDownloadWindowMs: toNumber(process.env.PUBLIC_DOWNLOAD_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    publicDownloadMax: toNumber(process.env.PUBLIC_DOWNLOAD_RATE_LIMIT_MAX, 60),
+  },
+
+  /**
+   * File-upload policy. Every threshold is environment-configurable so it can
+   * be tightened per deployment without a code change; the defaults below are
+   * the SECURE defaults, not the permissive ones.
+   *
+   * Nothing here is a substitute for the content inspection in
+   * utils/fileSignature.ts — these are the cheap limits applied before any
+   * expensive work happens.
+   */
+  upload: {
+    /** Per-file ceilings enforced by multer (and re-checked after buffering). */
+    imageMaxBytes: toNumber(process.env.UPLOAD_IMAGE_MAX_BYTES, 8 * 1024 * 1024),
+    docMaxBytes: toNumber(process.env.UPLOAD_DOC_MAX_BYTES, 20 * 1024 * 1024),
+    /** Smallest plausible real file; blocks 0-byte and truncated uploads. */
+    minBytes: toNumber(process.env.UPLOAD_MIN_BYTES, 64),
+
+    /** Multipart shape limits — applied before the body is buffered. */
+    maxFiles: toNumber(process.env.UPLOAD_MAX_FILES, 1),
+    maxFields: toNumber(process.env.UPLOAD_MAX_FIELDS, 8),
+    maxFieldSizeBytes: toNumber(process.env.UPLOAD_MAX_FIELD_SIZE_BYTES, 4 * 1024),
+    maxFieldNameSizeBytes: toNumber(process.env.UPLOAD_MAX_FIELD_NAME_BYTES, 100),
+    maxParts: toNumber(process.env.UPLOAD_MAX_PARTS, 12),
+    maxHeaderPairs: toNumber(process.env.UPLOAD_MAX_HEADER_PAIRS, 50),
+
+    /**
+     * Ceiling on simultaneous in-flight uploads per process. multer buffers
+     * into memory, so this — not the per-file limit — is what bounds peak RSS.
+     */
+    maxConcurrent: toNumber(process.env.UPLOAD_MAX_CONCURRENT, 6),
+
+    /** Longest filename accepted before sanitisation. */
+    maxFilenameLength: toNumber(process.env.UPLOAD_MAX_FILENAME_LENGTH, 200),
+
+    /**
+     * SVG is executable content: it can carry <script>, event handlers and
+     * external references, and Cloudinary serves it back with
+     * `Content-Type: image/svg+xml`. It is DISABLED by default. When enabled,
+     * uploads are not rewritten — they are rejected unless every element,
+     * attribute and URL is provably inert (see utils/svgGuard.ts).
+     */
+    allowSvg: process.env.UPLOAD_ALLOW_SVG === 'true',
+    /** Animated GIF support; disable to shrink the decoder attack surface. */
+    allowGif: process.env.UPLOAD_ALLOW_GIF !== 'false',
+    /** Legacy binary .doc (OLE2). Disabled by default — DOCX covers the need. */
+    allowLegacyDoc: process.env.UPLOAD_ALLOW_LEGACY_DOC === 'true',
+    /** Reject PDFs carrying JavaScript / launch actions / embedded files. */
+    rejectActivePdf: process.env.UPLOAD_REJECT_ACTIVE_PDF !== 'false',
+
+    /** ZIP (DOCX) decompression-bomb guards. */
+    zipMaxEntries: toNumber(process.env.UPLOAD_ZIP_MAX_ENTRIES, 512),
+    zipMaxTotalUncompressedBytes: toNumber(
+      process.env.UPLOAD_ZIP_MAX_UNCOMPRESSED_BYTES,
+      128 * 1024 * 1024,
+    ),
+    zipMaxCompressionRatio: toNumber(process.env.UPLOAD_ZIP_MAX_RATIO, 200),
+
+    /**
+     * Allowlist of upload destinations. The client may pick one of these and
+     * nothing else — the value is never concatenated into a path unchecked.
+     * Override with UPLOAD_FOLDERS as a comma-separated list.
+     */
+    folders: list(process.env.UPLOAD_FOLDERS).length
+      ? list(process.env.UPLOAD_FOLDERS)
+      : [
+          // The two endpoint defaults…
+          'images',
+          'documents',
+          // …and every destination the admin UI actually sends. Kept to
+          // exactly that set: an allowlist with speculative entries in it is
+          // a larger namespace than the product needs. `tests/upload.test.ts`
+          // asserts this stays in step with the admin's upload call sites.
+          'about',
+          'authors',
+          'avatars',
+          'blog',
+          'brand',
+          'brochures',
+          'companies',
+          'courses',
+          'gallery',
+          'hero',
+          'placements',
+          'testimonials',
+          'trainers',
+        ],
+
+    /**
+     * Hosts a stored media URL may point at. Guards the fields that hold an
+     * uploaded asset's URL (featured_image, brochure_url, avatar, …) so a
+     * writer cannot swap in `javascript:`, `data:text/html`, or a host we then
+     * fetch server-side in the brochure proxy.
+     */
+    /**
+     * Relax the host allowlist for display-only media fields (images, logos,
+     * avatars). Off by default. `brochureUrl` / `fileUrl` — the fields the
+     * brochure proxy fetches server-side — ignore this and are always checked.
+     */
+    // A getter, matching `cloudinary.enabled` / `supabase.configured` above:
+    // read at call time rather than frozen at import, so the flag reflects the
+    // current environment and can be exercised in tests.
+    get allowAnyHttpsMediaHost(): boolean {
+      return process.env.MEDIA_ALLOW_ANY_HTTPS_HOST === 'true';
+    },
+
+    mediaHosts: list(process.env.MEDIA_URL_HOSTS).length
+      ? list(process.env.MEDIA_URL_HOSTS)
+      : ['res.cloudinary.com'],
   },
 
   redis: {

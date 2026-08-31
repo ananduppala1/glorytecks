@@ -47,12 +47,42 @@ export function escapeHtml(s = ''): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Schemes safe to emit into an `href`/`src` in published blog HTML.
+ *
+ * Block content is author-supplied and the rendered `blogs.html` is served to
+ * anonymous visitors by the public API, so a `javascript:` or
+ * `data:text/html` URL here is stored XSS on the marketing site. Anything not
+ * recognisably a web link is replaced rather than rejected: an author should
+ * not be able to break a published page, and a dead link is a better failure
+ * than an executable one.
+ */
+const SAFE_URL = /^(https?:\/\/|\/(?!\/)|#|mailto:|tel:)/i;
+
+export function safeUrl(raw: string | undefined, fallback = '#'): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return fallback;
+  // The caller escapes before interpolating, so a scheme could otherwise hide
+  // behind an entity or an ignorable control character.
+  const probe = value
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#[0-9a-fx]+;?/gi, '')
+    .replace(/[\s\u0000-\u0020\u007f-\u009f]/g, '');
+  return SAFE_URL.test(probe) ? value : fallback;
+}
+
 /** Convert **bold**, `code` and [text](url) to HTML (after escaping). */
 export function inlineToHtml(s: string): string {
   let out = escapeHtml(s);
   out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  out = out.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_m, text: string, href: string) => `<a href="${safeUrl(href)}">${text}</a>`,
+  );
   return out;
 }
 
@@ -61,10 +91,10 @@ export function blocksToHtml(blocks: Block[]): string {
   for (const b of blocks) {
     switch (b.type) {
       case 'heading':
-        parts.push(`<h2 id="${b.id}">${escapeHtml(b.text)}</h2>`);
+        parts.push(`<h2 id="${escapeHtml(b.id)}">${escapeHtml(b.text)}</h2>`);
         break;
       case 'subheading':
-        parts.push(`<h3 id="${b.id}">${escapeHtml(b.text)}</h3>`);
+        parts.push(`<h3 id="${escapeHtml(b.id)}">${escapeHtml(b.text)}</h3>`);
         break;
       case 'paragraph':
         parts.push(`<p>${inlineToHtml(b.text)}</p>`);
@@ -86,7 +116,9 @@ export function blocksToHtml(blocks: Block[]): string {
         );
         break;
       case 'code':
-        parts.push(`<pre><code class="language-${b.lang}">${escapeHtml(b.code)}</code></pre>`);
+        parts.push(
+          `<pre><code class="language-${escapeHtml(b.lang)}">${escapeHtml(b.code)}</code></pre>`,
+        );
         break;
       case 'callout':
         parts.push(
@@ -105,7 +137,7 @@ export function blocksToHtml(blocks: Block[]): string {
       case 'image':
         if (b.url) {
           parts.push(
-            `<figure class="blog-image"><img src="${escapeHtml(b.url)}" alt="${escapeHtml(
+            `<figure class="blog-image"><img src="${escapeHtml(safeUrl(b.url, ''))}" alt="${escapeHtml(
               b.alt ?? '',
             )}" loading="lazy" />${
               b.caption ? `<figcaption>${escapeHtml(b.caption)}</figcaption>` : ''

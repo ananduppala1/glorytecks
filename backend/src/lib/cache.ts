@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { getRedisClient, isRedisReady } from '../config/redis';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
+import { redactText } from '../utils/redact';
 
 /* ── TTL Defaults (seconds) ──────────────────────────────────────────────── */
 export const CACHE_TTL = {
@@ -26,7 +27,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     if (raw === null) return null;
     return JSON.parse(raw) as T;
   } catch (err) {
-    logger.warn(`Cache GET failed for key "${key}": ${(err as Error).message}`);
+    logger.warn(`Cache GET failed for key "${key}": ${redactText((err as Error).message)}`);
     return null;
   }
 }
@@ -41,7 +42,7 @@ export async function cacheSet(key: string, data: unknown, ttlSeconds: number): 
     if (!client) return;
     await client.set(key, JSON.stringify(data), 'EX', ttlSeconds);
   } catch (err) {
-    logger.warn(`Cache SET failed for key "${key}": ${(err as Error).message}`);
+    logger.warn(`Cache SET failed for key "${key}": ${redactText((err as Error).message)}`);
   }
 }
 
@@ -55,7 +56,7 @@ export async function cacheDelete(key: string): Promise<void> {
     if (!client) return;
     await client.del(key);
   } catch (err) {
-    logger.warn(`Cache DEL failed for key "${key}": ${(err as Error).message}`);
+    logger.warn(`Cache DEL failed for key "${key}": ${redactText((err as Error).message)}`);
   }
 }
 
@@ -85,7 +86,7 @@ export async function cacheDeletePattern(pattern: string): Promise<void> {
       }
     } while (cursor !== '0');
   } catch (err) {
-    logger.warn(`Cache pattern DEL failed for "${pattern}": ${(err as Error).message}`);
+    logger.warn(`Cache pattern DEL failed for "${pattern}": ${redactText((err as Error).message)}`);
   }
 }
 

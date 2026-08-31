@@ -7,6 +7,7 @@ import { validate } from '../middlewares/validate';
 import { demoRequestController, contactEnquiryController } from '../controllers/lead.controller';
 import { demoRequestValidator, contactEnquiryValidator } from '../validators/lead.validator';
 import { brochureProxyController } from '../controllers/brochure.controller';
+import { publicDownloadLimiter } from '../middlewares/rateLimit';
 import { CONTENT_STATUS } from '../constants';
 import { cacheWrap, hashQuery, CACHE_TTL } from '../lib/cache';
 import { IBlog } from '../interfaces/common';
@@ -428,7 +429,13 @@ simpleCollection(
 );
 
 /* ── Brochure proxy (streams PDF from Cloudinary via our domain) ────────── */
-router.get('/brochures/:courseSlug/download', brochureProxyController.stream);
+// Rate-limited explicitly: app.ts exempts public GETs from the general
+// limiter, and unlike the other public reads this one streams a file.
+router.get(
+  '/brochures/:courseSlug/download',
+  publicDownloadLimiter,
+  brochureProxyController.stream,
+);
 
 simpleCollection(
   '/batches',

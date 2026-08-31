@@ -1,7 +1,8 @@
 import { useRef } from 'react';
 import { ImagePlus, Loader2, X, FileText } from 'lucide-react';
-import { useUpload } from '@/hooks/useUpload';
+import { useUpload, formatBytes } from '@/hooks/useUpload';
 import { Button } from '@/components/ui/button';
+import { safeAssetUrl } from '@/lib/safeUrl';
 import { cn } from '@/lib/utils';
 
 interface UploadControlProps {
@@ -14,13 +15,30 @@ interface UploadControlProps {
 
 export function ImageUpload({ value, onChange, folder, kind = 'image', className }: UploadControlProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { upload, uploading } = useUpload();
+  const { upload, uploading, policy } = useUpload();
+  const limits = policy[kind];
 
-  const handleFile = async (file?: File) => {
-    if (!file) return;
+  const handleFile = async (input: HTMLInputElement) => {
+    const file = input.files?.[0];
+    // Always clear the input, whatever the outcome. Without this the browser
+    // keeps the old selection and re-picking the same file after a rejected
+    // upload fires no change event at all — the control silently does nothing.
+    const reset = () => {
+      input.value = '';
+    };
+
+    if (!file) return reset();
+    if (uploading) return reset();
+
     const url = await upload(file, kind, folder);
+    reset();
     if (url) onChange(url);
   };
+
+  // A stored URL is rendered as a link the admin can click. It reaches here
+  // from the database, where another account may have written it, so the
+  // scheme is checked before it becomes an href.
+  const href = safeAssetUrl(value);
 
   if (kind === 'document') {
     return (
@@ -28,19 +46,22 @@ export function ImageUpload({ value, onChange, folder, kind = 'image', className
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.doc,.docx"
+          accept={limits.accept}
           className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0])}
+          onChange={(e) => void handleFile(e.currentTarget)}
         />
         <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
           {value ? 'Replace file' : 'Upload file'}
         </Button>
-        {value && (
-          <a href={value} target="_blank" rel="noreferrer" className="truncate text-xs text-primary underline">
+        {href && (
+          <a href={href} target="_blank" rel="noreferrer noopener" className="truncate text-xs text-primary underline">
             View current
           </a>
         )}
+        <span className="text-xs text-muted-foreground">
+          {limits.formats.join(', ').toUpperCase()} · up to {formatBytes(limits.maxBytes)}
+        </span>
       </div>
     );
   }
@@ -50,14 +71,14 @@ export function ImageUpload({ value, onChange, folder, kind = 'image', className
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={limits.accept}
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => void handleFile(e.currentTarget)}
       />
       <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-input bg-muted/40">
-        {value ? (
+        {href ? (
           <>
-            <img src={value} alt="" className="h-full w-full object-cover" />
+            <img src={href} alt="" className="h-full w-full object-cover" />
             <button
               type="button"
               onClick={() => onChange('')}
@@ -77,7 +98,9 @@ export function ImageUpload({ value, onChange, folder, kind = 'image', className
         <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
           {value ? 'Replace' : 'Upload image'}
         </Button>
-        <p className="text-xs text-muted-foreground">PNG, JPG or WebP. Stored on Cloudinary.</p>
+        <p className="text-xs text-muted-foreground">
+          {limits.formats.join(', ').toUpperCase()} up to {formatBytes(limits.maxBytes)}. Stored on Cloudinary.
+        </p>
       </div>
     </div>
   );

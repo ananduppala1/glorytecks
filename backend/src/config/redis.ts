@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 import { env } from './env';
 import { logger } from './logger';
+import { redactText } from '../utils/redact';
 
 /**
  * Redis client singleton. Used exclusively as a caching layer.
@@ -53,7 +54,11 @@ export async function connectRedis(): Promise<void> {
     });
 
     redisClient.on('error', (err) => {
-      logger.error(`Redis error: ${err.message}`);
+      // ioredis names the host and port it failed to reach, and a REDIS_URL
+      // with inline credentials can surface in a connection error. Redacted
+      // before it reaches the log sink — and never surfaced to a request:
+      // every cache operation degrades to a miss rather than throwing.
+      logger.error(`Redis error: ${redactText(err.message)}`);
     });
 
     redisClient.on('close', () => {
@@ -64,7 +69,9 @@ export async function connectRedis(): Promise<void> {
     await redisClient.connect();
   } catch (err) {
     isReady = false;
-    logger.error(`Redis connection failed: ${(err as Error).message} — running without cache`);
+    logger.error(
+      `Redis connection failed: ${redactText((err as Error).message)} — running without cache`,
+    );
   }
 }
 

@@ -6,7 +6,13 @@ import morgan from 'morgan';
 import { env } from './config/env';
 import { morganStream, logger } from './config/logger';
 import { apiLimiter } from './middlewares/rateLimit';
-import { notFoundHandler, errorHandler } from './middlewares/error';
+import {
+  notFoundHandler,
+  errorHandler,
+  requestId,
+  CORS_REJECTION,
+} from './middlewares/error';
+import { guardMediaUrls } from './middlewares/validate';
 import apiRouter from './routes';
 
 const app: Application = express();
@@ -35,13 +41,22 @@ const corsOptions: CorsOptions = {
     if (!origin) return callback(null, true);
     if (adminOrigins.includes(origin)) return callback(null, true);
     if (publicAllowsAll || publicOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    // A fixed sentinel, not a descriptive message. The error handler turns
+    // this into a plain 403; the previous message was echoed to the caller as
+    // a 500 body that repeated their origin and named the policy that blocked
+    // it.
+    return callback(new Error(CORS_REJECTION));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 app.use(cors(corsOptions));
+
+/* ── Correlation id ────────────────────────────────────────────────────── */
+// Assigned before anything can fail, so every log line and every error
+// response for this request can be tied together.
+app.use(requestId);
 
 /* ── Body & cookie parsing ─────────────────────────────────────────────── */
 app.use(express.json({ limit: '2mb' }));
@@ -62,6 +77,14 @@ app.use(env.apiPrefix, (req, res, next) => {
   if (req.path.startsWith('/public') && req.method === 'GET') return next();
   return apiLimiter(req, res, next);
 });
+
+/* ── Media URL safety ──────────────────────────────────────────────────── */
+// Applies to every mutating request, on every route, before any controller
+// runs. Uploaded-asset URLs must be same-origin paths or https URLs on an
+// approved host — so a writer cannot store `javascript:` / `data:text/html`
+// or point the platform at a host of their choosing, whether or not they used
+// the upload endpoints to get there.
+app.use(env.apiPrefix, guardMediaUrls);
 
 /* ── Routes ────────────────────────────────────────────────────────────── */
 app.get('/', (_req: Request, res: Response) => {

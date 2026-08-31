@@ -1,6 +1,7 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../config/supabase';
 import { ApiError } from '../utils/ApiError';
+import { isConnectivityFailure, SERVICE_UNAVAILABLE_MESSAGE } from '../utils/errorKind';
 import {
   TableDef,
   Row,
@@ -112,6 +113,9 @@ export function toApiError(error: PostgrestError, context: string): ApiError {
     // unique_violation — was Mongo duplicate key (11000) → 409
     case '23505':
       return ApiError.conflict(`${context} already exists`);
+    // NOTE: `context` is the resource's human label ("Blog", "Course") — the
+    // same word the route already exposes. It is safe in the 4xx branches
+    // below; it is NOT used in the default branch, which is a server fault.
     // foreign_key_violation → 400 (referenced row missing)
     case '23503':
       return ApiError.badRequest(`${context} references a record that does not exist`);
@@ -124,8 +128,27 @@ export function toApiError(error: PostgrestError, context: string): ApiError {
     case '22P02':
       return ApiError.badRequest('Invalid identifier format');
     default:
-      // Log-worthy but not client-visible: the message may contain SQL detail.
-      return ApiError.internal(`Database error while handling ${context}`);
+      // An unmapped SQLSTATE is a fault, not a user error. The old wording
+      // ("Database error while handling Blog") told a caller both that the
+      // database was the failing component and what the internal model is
+      // called. Keep that in the log; return nothing but a generic 500.
+      {
+        const detail = {
+          kind: 'postgrest',
+          context,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        };
+        // supabase-js reports an unreachable database as a PostgrestError with
+        // an empty code, so without this check a total outage would be
+        // indistinguishable from a bug — and would answer 500 instead of 503.
+        if (isConnectivityFailure(error)) {
+          return ApiError.serviceUnavailable(SERVICE_UNAVAILABLE_MESSAGE).withLogDetail(detail);
+        }
+        return ApiError.internal('Internal server error').withLogDetail(detail);
+      }
   }
 }
 

@@ -1,5 +1,6 @@
 import Image, { type ImageProps } from 'next/image';
 import { canOptimise } from '@/lib/images';
+import { safeUrl } from '@/lib/safeUrl';
 
 type SafeImageProps = Omit<ImageProps, 'src'> & {
   src: ImageProps['src'] | undefined | null;
@@ -19,7 +20,11 @@ type SafeImageProps = Omit<ImageProps, 'src'> & {
  * Static imports and same-origin paths always take the optimised path.
  */
 export function SafeImage({ src, fallbackSrc, alt, ...props }: SafeImageProps) {
-  const resolved = src || fallbackSrc;
+  // A CMS-supplied `src` is a database string. If its scheme is not one we are
+  // willing to put in an `img`, fall back rather than render it — otherwise the
+  // unoptimised branch below becomes the way an unsafe URL reaches the DOM.
+  const vetted = typeof src === 'string' ? safeUrl(src) : src;
+  const resolved = vetted || fallbackSrc;
   if (!resolved) return null;
 
   if (typeof resolved === 'string' && !canOptimise(resolved)) {

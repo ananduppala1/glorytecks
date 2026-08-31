@@ -10,7 +10,6 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  message?: string;
 }
 
 /**
@@ -24,24 +23,32 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, message: error?.message };
+  static getDerivedStateFromError(): State {
+    // The error itself is deliberately not kept: nothing renders it, and state
+    // that exists only to be accidentally displayed later is a hazard.
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // eslint-disable-next-line no-console
-    console.error('ErrorBoundary caught:', error, info.componentStack);
+    // Development only. In a production build this would print the component
+    // stack — and, for an error raised from a failed request, the Axios error
+    // object, whose `config.headers` carries the caller's bearer token — into
+    // a console that any bystander or screen-share can read.
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.error('ErrorBoundary caught:', error, info.componentStack);
+    }
   }
 
   componentDidUpdate(prevProps: Props) {
     // Auto-recover when navigating to a different route.
     if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
-      this.setState({ hasError: false, message: undefined });
+      this.setState({ hasError: false });
     }
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false, message: undefined });
+    this.setState({ hasError: false });
   };
 
   render() {

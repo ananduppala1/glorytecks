@@ -9,6 +9,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import type { Block } from "@/types/content";
+import { safeUrl } from "@/lib/safeUrl";
 
 // ── Inline formatting parser ────────────────────────────────────────────────
 // Supports **bold**, `inline code` and [text](url). Kept intentionally small —
@@ -38,12 +39,15 @@ function renderInline(text: string, keyPrefix = ""): ReactNode[] {
       );
     } else {
       const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      if (m) {
-        const internal = m[2].startsWith("/");
+      // A link target written by an author must not carry an executable
+      // scheme; an unusable target renders as plain text rather than a link.
+      const linkHref = m ? safeUrl(m[2]) : undefined;
+      if (m && linkHref) {
+        const internal = linkHref.startsWith("/");
         nodes.push(
           <a
             key={key}
-            href={m[2]}
+            href={linkHref}
             {...(internal ? {} : { target: "_blank", rel: "noreferrer" })}
             className="font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
           >
@@ -210,13 +214,16 @@ export function BlogContent({ blocks }: { blocks: Block[] }) {
                 )}
               </blockquote>
             );
-          case "image":
-            if (!block.url) return null;
+          case "image": {
+            // Author-supplied URL out of the CMS — vet the scheme before it
+            // becomes an `src`.
+            const imageSrc = safeUrl(block.url);
+            if (!imageSrc) return null;
             return (
               <figure key={i} className="my-2">
                 <div className="overflow-hidden rounded-xl border border-border bg-card/40">
                   <img
-                    src={block.url}
+                    src={imageSrc}
                     alt={block.alt ?? ""}
                     loading="lazy"
                     decoding="async"
@@ -230,6 +237,7 @@ export function BlogContent({ blocks }: { blocks: Block[] }) {
                 )}
               </figure>
             );
+          }
           case "faq":
             return (
               <div key={i} className="not-prose">

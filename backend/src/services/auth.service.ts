@@ -189,7 +189,18 @@ export const authService = {
     const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       password: newPassword,
     });
-    if (error) throw ApiError.badRequest(error.message);
+    if (error) {
+      // The provider's wording is written for its own API, not ours: it can
+      // name internal policies and endpoints. The one thing a caller can act
+      // on is the password rule, which we state ourselves.
+      logger.warn('Password update rejected by the identity provider', {
+        userId,
+        providerMessage: error.message,
+      });
+      throw ApiError.badRequest(
+        `Password could not be updated. It must be at least ${MIN_PASSWORD_LENGTH} characters and not previously used.`,
+      );
+    }
 
     // Previously the stored refresh hash was cleared to force re-login
     // everywhere; the equivalent is revoking all outstanding sessions.
@@ -254,7 +265,12 @@ export const authService = {
       if (error?.message?.toLowerCase().includes('already')) {
         throw ApiError.conflict('An admin with this email already exists');
       }
-      throw ApiError.badRequest(error?.message ?? 'Could not create the administrator account');
+      // Anything else is the provider's own diagnostic. Log it; tell the
+      // calling admin only that it did not work.
+      logger.warn('Identity provider rejected admin creation', {
+        providerMessage: error?.message,
+      });
+      throw ApiError.badRequest('Could not create the administrator account');
     }
 
     try {

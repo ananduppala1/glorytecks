@@ -90,14 +90,65 @@ api.interceptors.response.use(
   },
 );
 
-/** Normalise an Axios error into a human-readable message. */
+interface ApiErrorBody {
+  message?: string;
+  code?: string;
+  errors?: { field?: string; message: string }[];
+  requestId?: string;
+}
+
+/**
+ * Normalise an error into something safe to show a user.
+ *
+ * Two rules, and the second is the one that changed:
+ *
+ *  1. Field-level validation feedback (422 `errors[]`) and deliberate 4xx
+ *    messages are shown as-is. They are written by our own validators and are
+ *    what makes a form usable — suppressing them would be a downgrade, not a
+ *    hardening.
+ *
+ *  2. Everything else is replaced. A 5xx message is not written for a user
+ *    even when the server is ours, and `error.message` on an Axios error is
+ *    the library's own text ("Request failed with status code 500", "Network
+ *    Error") — it was never a message for this audience. The previous
+ *    implementation fell through to both.
+ *
+ * On a server fault the request id is surfaced instead: it is opaque, tells an
+ * attacker nothing, and is the one thing that makes a support report useful.
+ */
 export function getErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string; errors?: { message: string }[] } | undefined;
-    if (data?.errors?.length) return data.errors.map((e) => e.message).join(', ');
-    return data?.message ?? error.message ?? fallback;
+  if (!axios.isAxiosError(error)) {
+    // A non-HTTP error is a bug in this app; its message is for the console.
+    return fallback;
   }
-  if (error instanceof Error) return error.message;
+
+  const status = error.response?.status;
+  const data = error.response?.data as ApiErrorBody | undefined;
+
+  if (status === undefined) {
+    return error.code === 'ECONNABORTED'
+      ? 'The request timed out. Please try again.'
+      : 'Could not reach the server. Check your connection and try again.';
+  }
+
+  if (status >= 500) {
+    const ref = data?.requestId ? ` (ref: ${data.requestId.slice(0, 8)})` : '';
+    return status === 503
+      ? `The service is temporarily unavailable. Please try again shortly.${ref}`
+      : `Something went wrong on our end. Please try again.${ref}`;
+  }
+
+  if (status === 429) return 'Too many requests. Please wait a moment and try again.';
+
+  // 4xx: our own wording. Field errors first — they are the actionable ones.
+  if (data?.errors?.length) {
+    return data.errors
+      .map((e) => (e.field ? `${e.field}: ${e.message}` : e.message))
+      .join(', ');
+  }
+  if (typeof data?.message === 'string' && data.message.length > 0 && data.message.length <= 300) {
+    return data.message;
+  }
   return fallback;
 }
 

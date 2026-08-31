@@ -5,9 +5,14 @@ import { useEffect } from "react";
 /**
  * Route-level error boundary.
  *
- * Renders the same visual language as the app-level ErrorBoundary. The raw
- * error is logged to the server console only — no stack trace, backend message
- * or digest is ever shown to a visitor.
+ * Renders the same visual language as the app-level ErrorBoundary. Neither the
+ * error message, its stack, nor the Next.js `digest` is shown to a visitor.
+ *
+ * Note this is a client component, so the effect below runs in the VISITOR's
+ * browser, not on the server — an earlier comment here claimed otherwise. Next
+ * redacts errors thrown in server components down to a digest before they
+ * reach the client, but an error thrown in a client component keeps its full
+ * message, so the log is gated to development.
  */
 export default function Error({
   error,
@@ -17,7 +22,9 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Route error:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Route error:", error);
+    }
   }, [error]);
 
   return (

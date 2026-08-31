@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { safeCssUrl } from "@/lib/safeUrl";
 
 import {
   Accordion,
@@ -55,9 +56,12 @@ const CourseDetailView = ({ course, allCourses }: CourseDetailViewProps) => {
     <>
       {/* HERO SECTION */}
       <motion.section className="bg-gradient-hero" style={{
-        backgroundImage: course.bannerImage
-              ? `url(${course.bannerImage})`
-              : "bg-gradient-hero",
+        // The banner is a CMS string interpolated into a CSS value. Unquoted
+        // and unvetted, a URL containing `)` or `;` would close the url() and
+        // append declarations of its own, so it is checked before use.
+        backgroundImage: safeCssUrl(course.bannerImage)
+              ? `url("${safeCssUrl(course.bannerImage)}")`
+              : undefined,
           }}
           {...smoothReveal}
         >

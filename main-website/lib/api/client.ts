@@ -157,9 +157,12 @@ export async function requestWithMeta<T>(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       ...cacheOptions,
     });
-  } catch (err) {
-    // Network failure / CORS / server unreachable.
-    throw new ApiError(err instanceof Error ? err.message : 'Network request failed', 0, true);
+  } catch {
+    // Network failure / CORS / server unreachable. The underlying message is
+    // deliberately dropped: fetch reports the failing host and port through the
+    // error's `cause`, and nothing on this site needs that text — while any
+    // future component that decided to render the message would publish it.
+    throw new ApiError('Network request failed', 0, true);
   }
 
   let payload: ApiEnvelope<T> | undefined;
