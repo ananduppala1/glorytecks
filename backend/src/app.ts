@@ -147,6 +147,25 @@ app.use((req, res, next) =>
 // response for this request can be tied together.
 app.use(requestId);
 
+/* ── Cache policy for the authenticated surface ────────────────────────── */
+//
+// The public router sets a deliberate `Cache-Control` on every read (see
+// public.routes). The authenticated surface set NOTHING, and "no header" does
+// not mean "not cached": a 200 GET without explicit freshness is heuristically
+// cacheable by a shared cache, and these responses are per-user —
+// `/auth/me` returns a name, email and role, `/admins` returns the whole
+// administrator list. With no `Vary: Authorization` either, a proxy keying on
+// URL alone could serve one administrator's response to another.
+//
+// So the default for everything outside `/public` is `no-store`. It is set
+// before the rate limiter so a 429 is covered too, and it is only a DEFAULT:
+// it runs ahead of the routers, so any handler that sets its own header (the
+// public reads, the brochure stream) still wins.
+app.use(env.apiPrefix, (req, res, next) => {
+  if (!req.path.startsWith('/public')) res.set('Cache-Control', 'no-store');
+  next();
+});
+
 /* ── Rate limiting ─────────────────────────────────────────────────────── */
 // Deliberately BEFORE the body parsers. Parsing a 2 MB JSON body is the most
 // expensive thing this process does before reaching a handler, and limiting

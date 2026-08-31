@@ -182,6 +182,44 @@ test('every response carries the expected security headers', async () => {
   assert.equal(res.headers['x-powered-by'], undefined, 'the stack must not be advertised');
 });
 
+/**
+ * "No Cache-Control" does not mean "not cached": a 200 GET without explicit
+ * freshness is heuristically cacheable by a shared cache, and the authenticated
+ * responses are per-user — `/auth/me` carries a name, email and role. There is
+ * no `Vary: Authorization` either, so a proxy keying on URL alone could hand
+ * one administrator's response to another.
+ */
+test('authenticated responses are never stored by a shared cache', async () => {
+  for (const path of [
+    '/api/v1/auth/me',
+    '/api/v1/admins',
+    '/api/v1/blogs',
+    '/api/v1/settings',
+    '/api/v1/dashboard/stats',
+    '/api/v1/uploads/config',
+    '/api/v1/health',
+    '/api/v1/nope',
+  ]) {
+    const res = await call(path, { headers: { Authorization: 'Bearer t' } });
+    assert.match(
+      String(res.headers['cache-control']),
+      /no-store/,
+      `${path} must not be storable (got "${res.headers['cache-control']}")`,
+    );
+  }
+});
+
+test('the public read cache policy is left intact', async () => {
+  // The default must be a DEFAULT: the public router sets its own deliberate
+  // policy and has to keep winning.
+  for (const path of ['/api/v1/public/courses', '/api/v1/public/blogs', '/api/v1/public/settings']) {
+    const res = await call(path);
+    const cc = String(res.headers['cache-control']);
+    assert.match(cc, /^public,/, `${path} must keep its own policy (got "${cc}")`);
+    assert.ok(!/no-store/.test(cc), `${path} must not have been overwritten with no-store`);
+  }
+});
+
 /* ── public API exposure ────────────────────────────────────────────────── */
 
 test('the public API exposes no lead, admin or credential route', async () => {
