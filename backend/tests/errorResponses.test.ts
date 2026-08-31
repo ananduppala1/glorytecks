@@ -90,7 +90,11 @@ async function capturingLogs<T>(fn: () => Promise<T>): Promise<{ result: T; logg
       lines.push(`${level} ${String(message)} ${meta ? JSON.stringify(meta) : ''}`);
       return logger;
     };
-  for (const level of ['error', 'warn', 'info', 'debug'] as const) {
+  // `http` is included deliberately. It is the level morgan's access log writes
+  // through, and leaving it out meant the assertions below only ever saw the
+  // error handler's own (already redacted) line — so morgan writing the raw URL
+  // for every request, query values and all, was invisible to this suite.
+  for (const level of ['error', 'warn', 'info', 'debug', 'http'] as const) {
     mock.method(logger, level, record(level) as never);
   }
   try {
@@ -184,6 +188,24 @@ test('an unexpected route logs the path but not the query values', async () => {
   assert.match(logged, /\/api\/v1\/nope/, 'the path is needed to debug');
   assert.ok(!logged.includes('SUPERSECRET123'), 'a token in the URL must not be logged');
   assert.ok(!logged.includes('alice@example.com'), 'an email in the URL must not be logged');
+});
+
+/**
+ * The access log runs on EVERY request, including the ones that succeed, and
+ * it never passes through the error handler — so it is the one place a query
+ * value can reach the log sink without `safePath` having seen it.
+ */
+test('the access log records the path but not the query values', async () => {
+  const { logged } = await capturingLogs(() =>
+    call('/api/v1/health?token=SUPERSECRET123&email=alice@example.com'),
+  );
+  const accessLines = logged.split('\n').filter((l) => l.startsWith('http '));
+  assert.ok(accessLines.length > 0, 'the access log must still be written');
+  const access = accessLines.join('\n');
+  assert.match(access, /\/api\/v1\/health/, 'the path is needed to debug');
+  assert.match(access, /GET/, 'the method is needed to debug');
+  assert.ok(!access.includes('SUPERSECRET123'), 'a token in the URL must not be logged');
+  assert.ok(!access.includes('alice@example.com'), 'an email in the URL must not be logged');
 });
 
 test('malformed JSON is a 400 that does not quote the parser', async () => {

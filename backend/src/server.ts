@@ -5,6 +5,7 @@ import { checkSupabaseConnection } from './config/supabase';
 import { connectRedis, disconnectRedis } from './config/redis';
 import './config/cloudinary'; // initialise cloudinary config at boot
 import { Server } from 'http';
+import { redactText } from './utils/redact';
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Vercel Serverless:
@@ -69,11 +70,18 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
+// These are the last-resort handlers, and the only log paths in the process
+// that did not run their message through `redactText`. The message on an error
+// that got this far is arbitrary library text — an ioredis failure quoting a
+// REDIS_URL with an inline password, a client error carrying a bearer token —
+// so it gets the same treatment as every other log line. The stack is kept
+// as-is: file paths are what make this handler worth having, and they are a
+// server-log concern, not a response one.
 process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled Rejection', { reason: String(reason) });
+  logger.error('Unhandled Rejection', { reason: redactText(String(reason)) });
 });
 process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception', { error: err.message, stack: err.stack });
+  logger.error('Uncaught Exception', { error: redactText(err.message), stack: err.stack });
   process.exit(1);
 });
 

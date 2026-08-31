@@ -13,6 +13,7 @@ import {
   CORS_REJECTION,
 } from './middlewares/error';
 import { guardMediaUrls } from './middlewares/validate';
+import { safePath } from './utils/redact';
 import { guardPayloadShape } from './validators/common';
 import apiRouter from './routes';
 
@@ -173,6 +174,22 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser(env.cookie.secret));
 
 /* ── Request logging ───────────────────────────────────────────────────── */
+//
+// morgan's built-in `url` token writes `originalUrl` verbatim, query string and
+// all. That is the one thing the error path takes care NOT to do: the 404 body
+// does not echo the URL, and every error log line runs it through `safePath`
+// first. morgan bypassed both and wrote the raw URL for EVERY request, so a
+// token, one-time code or email that ever reaches a query string was recorded
+// in full — on the success path too, where no error handler ever sees it.
+//
+// Overriding the token rather than rewriting the format strings keeps both the
+// `combined` and `dev` layouts exactly as they were, and means any format added
+// later inherits the redaction instead of having to remember it.
+morgan.token('url', (req) => {
+  const raw = (req as Request).originalUrl ?? req.url ?? '';
+  return safePath(raw);
+});
+
 app.use(morgan(env.isProd ? 'combined' : 'dev', { stream: morganStream }));
 
 /* ── Database connectivity ─────────────────────────────────────────────── */
