@@ -32,12 +32,9 @@ import {
   IBatch,
 } from '../interfaces/common';
 import { CrudControllerConfig } from '../controllers/crud.factory';
-import { ROLES, Role } from '../constants';
+import { ROLES, Role, CONTENT_ROLES } from '../constants';
 
-// Role groups for generic (registry) resources.
-// Content team manages blog/course-adjacent content + the People & Proof section.
-const CONTENT_ROLES: Role[] = [ROLES.ADMIN, ROLES.CONTENT_WRITER];
-// Everything else (site-wide content) stays admin-only.
+// Everything outside the content team's remit (site-wide content) is admin-only.
 const ADMIN_ONLY: Role[] = [ROLES.ADMIN];
 
 export interface ResourceDef<T> {

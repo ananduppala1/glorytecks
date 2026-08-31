@@ -16,7 +16,6 @@ const SAFE_SCHEME = /^(https?:\/\/|\/(?!\/))/i;
 
 /** Strip what browsers ignore but a naive prefix check would not. */
 function probe(value: string): string {
-  // eslint-disable-next-line no-control-regex
   return value.replace(/[\s\u0000-\u0020\u007f-\u009f\u200b-\u200f\u202a-\u202e\ufeff]/g, '');
 }
 

@@ -43,8 +43,10 @@ export function safeAssetUrl(url: string | undefined | null): string | undefined
  * `location.state.from.pathname`, and is then handed to `navigate()` — which
  * treats a leading `//` as protocol-relative and sends the freshly
  * authenticated admin to another site. Backslashes behave the same way, which
- * is the bypass behind the react-router advisory this app cannot yet take the
- * fix for (it is a v7 major).
+ * is the bypass behind GHSA-wrjc-x8rr-h8h6 — patched in the router as of v7.18,
+ * which this app now runs, so this check is no longer the only thing standing
+ * between a crafted link and an off-site redirect. It stays regardless: the
+ * router version is a dependency that can move, the guarantee should not.
  *
  * So the target is validated here rather than trusted to the router: it must
  * be a single-slash absolute path, and anything else falls back to the app

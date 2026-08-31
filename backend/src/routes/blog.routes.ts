@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { blogController } from '../controllers/blog.controller';
 import { requireAuth, authorize } from '../middlewares/auth';
 import { validate } from '../middlewares/validate';
-import { ROLES } from '../constants';
+import { CONTENT_ROLES } from '../constants';
 import {
   createBlogValidator,
   updateBlogValidator,
@@ -13,7 +13,7 @@ import { adminWriteLimiter, expensiveLimiter } from '../middlewares/rateLimit';
 
 const router = Router();
 
-router.use(requireAuth, authorize(ROLES.ADMIN, ROLES.CONTENT_WRITER));
+router.use(requireAuth, authorize(...CONTENT_ROLES));
 
 router.get('/', validate(listQueryValidator), blogController.list);
 router.get('/tags', blogController.tags);

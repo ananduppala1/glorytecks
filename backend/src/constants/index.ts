@@ -16,6 +16,21 @@ export const ALL_ROLES: Role[] = [
   ROLES.CONTENT_WRITER,
 ];
 
+/**
+ * Which roles may see a module's data.
+ *
+ * These live here, not beside a single router, because the same decision is
+ * enforced in more than one place: each module's router gates its own
+ * endpoints, and the dashboard has to apply the SAME rule when it aggregates
+ * those modules onto one screen. A second copy of an authorization rule is a
+ * rule that drifts — which is exactly how the dashboard came to hand lead
+ * names, emails and phone numbers to roles the lead routes refuse.
+ */
+/** Leads (enquiries + demo requests) hold personal data: front desk + admin. */
+export const LEAD_ROLES: Role[] = [ROLES.ADMIN, ROLES.RECEPTIONIST];
+/** Blogs, courses and the People & Proof section: content team + admin. */
+export const CONTENT_ROLES: Role[] = [ROLES.ADMIN, ROLES.CONTENT_WRITER];
+
 export const CONTENT_STATUS = {
   DRAFT: 'draft',
   PUBLISHED: 'published',

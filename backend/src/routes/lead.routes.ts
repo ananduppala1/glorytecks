@@ -5,13 +5,10 @@ import { validate } from '../middlewares/validate';
 import { leadStatusValidator } from '../validators/lead.validator';
 import { uuidParam, listQueryValidator } from '../validators/common';
 import { adminWriteLimiter } from '../middlewares/rateLimit';
-import { ROLES } from '../constants';
-
-// Leads (enquiries + demo requests) are handled by admins and receptionists.
-const leadRoles = [ROLES.ADMIN, ROLES.RECEPTIONIST];
+import { LEAD_ROLES } from '../constants';
 
 const demoRouter = Router();
-demoRouter.use(requireAuth, authorize(...leadRoles));
+demoRouter.use(requireAuth, authorize(...LEAD_ROLES));
 demoRouter.get('/', validate(listQueryValidator), demoRequestController.list);
 demoRouter.get('/:id', validate(uuidParam()), demoRequestController.getById);
 demoRouter.patch(
@@ -23,7 +20,7 @@ demoRouter.patch(
 demoRouter.delete('/:id', adminWriteLimiter, validate(uuidParam()), demoRequestController.remove);
 
 const contactRouter = Router();
-contactRouter.use(requireAuth, authorize(...leadRoles));
+contactRouter.use(requireAuth, authorize(...LEAD_ROLES));
 contactRouter.get('/', validate(listQueryValidator), contactEnquiryController.list);
 contactRouter.get('/:id', validate(uuidParam()), contactEnquiryController.getById);
 contactRouter.patch(
