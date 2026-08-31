@@ -4,6 +4,7 @@ import { requireAuth, authorize } from '../middlewares/auth';
 import { validate } from '../middlewares/validate';
 import { leadStatusValidator } from '../validators/lead.validator';
 import { uuidParam, listQueryValidator } from '../validators/common';
+import { adminWriteLimiter } from '../middlewares/rateLimit';
 import { ROLES } from '../constants';
 
 // Leads (enquiries + demo requests) are handled by admins and receptionists.
@@ -15,10 +16,11 @@ demoRouter.get('/', validate(listQueryValidator), demoRequestController.list);
 demoRouter.get('/:id', validate(uuidParam()), demoRequestController.getById);
 demoRouter.patch(
   '/:id/status',
+  adminWriteLimiter,
   validate([...uuidParam(), ...leadStatusValidator]),
   demoRequestController.updateStatus,
 );
-demoRouter.delete('/:id', validate(uuidParam()), demoRequestController.remove);
+demoRouter.delete('/:id', adminWriteLimiter, validate(uuidParam()), demoRequestController.remove);
 
 const contactRouter = Router();
 contactRouter.use(requireAuth, authorize(...leadRoles));
@@ -26,9 +28,15 @@ contactRouter.get('/', validate(listQueryValidator), contactEnquiryController.li
 contactRouter.get('/:id', validate(uuidParam()), contactEnquiryController.getById);
 contactRouter.patch(
   '/:id/status',
+  adminWriteLimiter,
   validate([...uuidParam(), ...leadStatusValidator]),
   contactEnquiryController.updateStatus,
 );
-contactRouter.delete('/:id', validate(uuidParam()), contactEnquiryController.remove);
+contactRouter.delete(
+  '/:id',
+  adminWriteLimiter,
+  validate(uuidParam()),
+  contactEnquiryController.remove,
+);
 
 export { demoRouter, contactRouter };

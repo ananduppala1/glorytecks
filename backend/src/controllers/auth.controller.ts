@@ -5,6 +5,7 @@ import { sendSuccess } from '../utils/ApiResponse';
 import { env } from '../config/env';
 import { COOKIE_NAMES } from '../constants';
 import { ApiError } from '../utils/ApiError';
+import { noteLoginFailure, noteLoginSuccess } from '../middlewares/rateLimit';
 
 // 7 days in ms (aligns with default refresh expiry; cookie maxAge is best-effort).
 const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -31,9 +32,29 @@ function clearRefreshCookie(res: Response): void {
 export const authController = {
   login: asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body as { email: string; password: string };
-    const { user, tokens } = await authService.login(email, password);
-    setRefreshCookie(res, tokens.refreshToken);
-    return sendSuccess(res, { user, accessToken: tokens.accessToken }, 'Logged in successfully');
+
+    let result;
+    try {
+      result = await authService.login(email, password);
+    } catch (err) {
+      // Feeds the progressive delay. Recorded against the SUBMITTED address
+      // whether or not it belongs to an account, so the backoff an attacker
+      // experiences is identical either way and cannot be used to test which
+      // addresses are registered.
+      await noteLoginFailure(email, req);
+      throw err;
+    }
+
+    // A correct password ends the streak: someone who mistyped twice and then
+    // got it right should not carry a delay into their next session.
+    await noteLoginSuccess(email, req);
+
+    setRefreshCookie(res, result.tokens.refreshToken);
+    return sendSuccess(
+      res,
+      { user: result.user, accessToken: result.tokens.accessToken },
+      'Logged in successfully',
+    );
   }),
 
   refresh: asyncHandler(async (req: Request, res: Response) => {

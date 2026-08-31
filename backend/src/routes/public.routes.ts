@@ -7,7 +7,11 @@ import { validate } from '../middlewares/validate';
 import { demoRequestController, contactEnquiryController } from '../controllers/lead.controller';
 import { demoRequestValidator, contactEnquiryValidator } from '../validators/lead.validator';
 import { brochureProxyController } from '../controllers/brochure.controller';
-import { publicDownloadLimiter } from '../middlewares/rateLimit';
+import {
+  publicDownloadLimiter,
+  publicWriteLimiter,
+  honeypotGuard,
+} from '../middlewares/rateLimit';
 import { slugParam, listQueryValidator } from '../validators/common';
 import { CONTENT_STATUS } from '../constants';
 import { cacheWrap, hashQuery, CACHE_TTL } from '../lib/cache';
@@ -522,7 +526,24 @@ router.get(
 );
 
 /* ── Public form submissions (website → CMS) ───────────────────────────── */
-router.post('/demo-requests', validate(demoRequestValidator), demoRequestController.create);
-router.post('/contact', validate(contactEnquiryValidator), contactEnquiryController.create);
+// The only writes an anonymous caller can reach, so the only ones a spam run
+// can target. Limited per address and hourly: a visitor submits one form,
+// occasionally two. The contact form's honeypot field stays — IP limiting and
+// a honeypot cover each other's blind spot (a NAT shares one budget, a botnet
+// has many addresses but usually one script), and neither is the whole answer.
+router.post(
+  '/demo-requests',
+  publicWriteLimiter,
+  honeypotGuard,
+  validate(demoRequestValidator),
+  demoRequestController.create,
+);
+router.post(
+  '/contact',
+  publicWriteLimiter,
+  honeypotGuard,
+  validate(contactEnquiryValidator),
+  contactEnquiryController.create,
+);
 
 export default router;

@@ -19,6 +19,14 @@ const PHONE_RE = /^[0-9+\s-]{8,15}$/;
 
 const DEMO_FIELDS = ['name', 'phone', 'course', 'source'] as const;
 
+/**
+ * Hidden fields the public forms render as bait. `honeypotGuard` absorbs any
+ * request that fills one, so a body reaching validation has them empty — but
+ * they must be tolerated here or the request is rejected with a field error
+ * that tells the author exactly which name was the trap.
+ */
+const HONEYPOT_FIELDS = ['hp', 'website', 'company_website'] as const;
+
 export const demoRequestValidator = [
   dropFields(SERVER_OWNED_FIELDS),
   str('name', { required: true, min: 2, max: LIMITS.NAME, label: 'Name' }),
@@ -33,7 +41,7 @@ export const demoRequestValidator = [
   str('source', { max: LIMITS.LABEL }),
   // `status` and `notes` are staff fields: a public submitter must not be able
   // to file a lead pre-marked "converted", or attach an internal note.
-  noUnknownFields(DEMO_FIELDS, SERVER_OWNED_FIELDS),
+  noUnknownFields(DEMO_FIELDS, [...SERVER_OWNED_FIELDS, ...HONEYPOT_FIELDS]),
 ];
 
 const CONTACT_FIELDS = ['name', 'email', 'phone', 'course', 'message', 'subject'] as const;
@@ -61,7 +69,7 @@ export const contactEnquiryValidator = [
   str('course', { max: LIMITS.LABEL }),
   str('subject', { max: LIMITS.LABEL }),
   str('message', { required: true, min: 5, max: LIMITS.TEXT, label: 'Message' }),
-  noUnknownFields(CONTACT_FIELDS, SERVER_OWNED_FIELDS),
+  noUnknownFields(CONTACT_FIELDS, [...SERVER_OWNED_FIELDS, ...HONEYPOT_FIELDS]),
 ];
 
 /**

@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import { env } from './config/env';
 import { morganStream, logger } from './config/logger';
-import { apiLimiter } from './middlewares/rateLimit';
+import { apiLimiter, publicReadLimiter, publicReadGuard } from './middlewares/rateLimit';
 import {
   notFoundHandler,
   errorHandler,
@@ -18,8 +18,16 @@ import apiRouter from './routes';
 
 const app: Application = express();
 
-// Trust the first proxy (needed for correct client IPs behind Render/Railway/Nginx).
-app.set('trust proxy', 1);
+// How many proxies sit between the public internet and this process.
+//
+// This single number decides whether IP rate limiting works at all. Too low and
+// every request appears to come from the load balancer, so one abusive client
+// exhausts everybody's budget. Too high — and `true` is infinitely too high —
+// and the app believes whatever `X-Forwarded-For` the caller sent, handing an
+// attacker a fresh budget per forged address. It is a deployment fact, so it
+// comes from the environment (TRUST_PROXY_HOPS); 1 matches a single platform
+// proxy, 2 is right behind Cloudflare *and* a platform proxy.
+app.set('trust proxy', env.rateLimit.trustProxyHops);
 
 /* ── Security headers ──────────────────────────────────────────────────── */
 app.use(
@@ -59,6 +67,27 @@ app.use(cors(corsOptions));
 // response for this request can be tied together.
 app.use(requestId);
 
+/* ── Rate limiting ─────────────────────────────────────────────────────── */
+// Deliberately BEFORE the body parsers. Parsing a 2 MB JSON body is the most
+// expensive thing this process does before reaching a handler, and limiting
+// afterwards means a flood is fully parsed and only then rejected — the
+// limiter protects the handlers but not the parser. Limiting first means an
+// over-quota request costs a header read.
+//
+// Public reads get a high flood ceiling rather than the previous blanket
+// exemption: they are cached and idempotent, but "cheap" is not "free", and an
+// unmetered endpoint is still a bandwidth amplifier. Reads that carry a search
+// term or a deep page — the shapes that miss the shared cache — additionally
+// spend a smaller search budget.
+app.use(env.apiPrefix, (req, res, next) => {
+  if (req.path.startsWith('/public') && req.method === 'GET') {
+    return publicReadLimiter(req, res, (err?: unknown) =>
+      err ? next(err) : publicReadGuard(req, res, next),
+    );
+  }
+  return apiLimiter(req, res, next);
+});
+
 /* ── Body & cookie parsing ─────────────────────────────────────────────── */
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -72,12 +101,6 @@ app.use(morgan(env.isProd ? 'combined' : 'dev', { stream: morganStream }));
 // over stateless HTTP (PostgREST), so there is no connection to open, pool or
 // re-establish on a serverless cold start — which also removes the buffering
 // and timeout handling the Mongo driver needed on Vercel.
-
-/* ── Rate limiting (skip the public read endpoints; they're cached/idempotent) ── */
-app.use(env.apiPrefix, (req, res, next) => {
-  if (req.path.startsWith('/public') && req.method === 'GET') return next();
-  return apiLimiter(req, res, next);
-});
 
 /* ── Payload shape ─────────────────────────────────────────────────────── */
 // Depth, node count and array width, applied to every mutating request before

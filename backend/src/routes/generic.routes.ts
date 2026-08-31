@@ -3,6 +3,7 @@ import { resources } from '../services/registry';
 import { createCrudController } from '../controllers/crud.factory';
 import { requireAuth, authorize } from '../middlewares/auth';
 import { validate } from '../middlewares/validate';
+import { adminWriteLimiter } from '../middlewares/rateLimit';
 import { RESOURCE_SCHEMAS } from '../validators/resource.validators';
 import { uuidParam, listQueryValidator } from '../validators/common';
 import { ROLES } from '../constants';
@@ -37,10 +38,12 @@ export function buildGenericRoutes(): Router {
 
     r.get('/', validate(listQueryValidator), handlers.list);
     r.get('/:id', validate(uuidParam()), handlers.getById);
-    r.post('/', validate(schema.create), handlers.create);
-    r.put('/:id', validate([...uuidParam(), ...schema.update]), handlers.update);
-    r.patch('/:id', validate([...uuidParam(), ...schema.update]), handlers.update);
-    r.delete('/:id', validate(uuidParam()), handlers.remove);
+    // Writes are limited per account. Reads are covered by the global API
+    // ceiling — they are cheap and the admin UI issues many of them per screen.
+    r.post('/', adminWriteLimiter, validate(schema.create), handlers.create);
+    r.put('/:id', adminWriteLimiter, validate([...uuidParam(), ...schema.update]), handlers.update);
+    r.patch('/:id', adminWriteLimiter, validate([...uuidParam(), ...schema.update]), handlers.update);
+    r.delete('/:id', adminWriteLimiter, validate(uuidParam()), handlers.remove);
 
     router.use(`/${def.path}`, r);
   }

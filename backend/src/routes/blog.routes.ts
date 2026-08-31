@@ -9,6 +9,7 @@ import {
   blogStatusValidator,
 } from '../validators/blog.validator';
 import { uuidParam, slugParam, listQueryValidator } from '../validators/common';
+import { adminWriteLimiter, expensiveLimiter } from '../middlewares/rateLimit';
 
 const router = Router();
 
@@ -18,10 +19,23 @@ router.get('/', validate(listQueryValidator), blogController.list);
 router.get('/tags', blogController.tags);
 router.get('/slug/:slug', validate(slugParam()), blogController.getBySlug);
 router.get('/:id', validate(uuidParam()), blogController.getById);
-router.post('/', validate(createBlogValidator), blogController.create);
-router.post('/:id/duplicate', validate(uuidParam()), blogController.duplicate);
-router.patch('/:id/status', validate([...uuidParam(), ...blogStatusValidator]), blogController.setStatus);
-router.put('/:id', validate([...uuidParam(), ...updateBlogValidator]), blogController.update);
-router.delete('/:id', validate(uuidParam()), blogController.remove);
+router.post('/', adminWriteLimiter, validate(createBlogValidator), blogController.create);
+// Duplication reads a whole post and writes a copy of it, including the
+// rendered HTML — one request, several times the cost of an ordinary write, and
+// repeatable in a loop. It gets the expensive-operation budget.
+router.post('/:id/duplicate', expensiveLimiter, validate(uuidParam()), blogController.duplicate);
+router.patch(
+  '/:id/status',
+  adminWriteLimiter,
+  validate([...uuidParam(), ...blogStatusValidator]),
+  blogController.setStatus,
+);
+router.put(
+  '/:id',
+  adminWriteLimiter,
+  validate([...uuidParam(), ...updateBlogValidator]),
+  blogController.update,
+);
+router.delete('/:id', adminWriteLimiter, validate(uuidParam()), blogController.remove);
 
 export default router;

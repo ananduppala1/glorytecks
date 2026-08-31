@@ -95,14 +95,103 @@ export const env = {
     },
   },
 
+  /**
+   * Rate-limit policy.
+   *
+   * Every threshold and window is here rather than in route code: a limit is a
+   * deployment decision that changes with traffic, and one that has to be
+   * tunable without a release. Route files declare WHICH class of limit
+   * applies; this declares what that class means.
+   *
+   * The defaults are sized for a training-institute CMS with a public
+   * marketing site: generous enough that a real visitor filling in a form or an
+   * editor working through a backlog never sees a 429, tight enough that
+   * automated abuse does.
+   */
   rateLimit: {
+    /**
+     * Number of proxies between the public internet and this app. Wrong in
+     * either direction breaks IP limiting — see utils/clientIp.
+     */
+    trustProxyHops: toNumber(process.env.TRUST_PROXY_HOPS, 1),
+
+    /**
+     * What to do when Redis is unreachable.
+     *  'degrade' (default) — fall back to per-process counters and log loudly.
+     *  'local'             — always use per-process counters (single-instance
+     *                        deployments, and tests).
+     */
+    failMode: (process.env.RATE_LIMIT_FAIL_MODE ?? 'degrade') as 'degrade' | 'local',
+
+    /** Global ceiling for authenticated/admin API traffic. */
     windowMs: toNumber(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     max: toNumber(process.env.RATE_LIMIT_MAX, 300),
+
+    /* ── Authentication ────────────────────────────────────────────────── */
+    authWindowMs: toNumber(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    /** Failed sign-in attempts from one address. */
     authMax: toNumber(process.env.AUTH_RATE_LIMIT_MAX, 20),
+    /**
+     * Failed sign-in attempts against one email address, from anywhere.
+     * This is what a distributed credential-stuffing run has to get past.
+     */
+    authAccountMax: toNumber(process.env.AUTH_ACCOUNT_RATE_LIMIT_MAX, 10),
+    /** Ceiling on total sign-in attempts from one address, successes included. */
+    authTotalMax: toNumber(process.env.AUTH_TOTAL_RATE_LIMIT_MAX, 60),
+
+    /** Refresh-token exchanges per address. */
+    refreshWindowMs: toNumber(process.env.REFRESH_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    refreshMax: toNumber(process.env.REFRESH_RATE_LIMIT_MAX, 60),
+
+    /** Password changes per account. */
+    passwordWindowMs: toNumber(process.env.PASSWORD_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+    passwordMax: toNumber(process.env.PASSWORD_RATE_LIMIT_MAX, 10),
+
+    /* ── Progressive backoff ───────────────────────────────────────────── */
+    /**
+     * Consecutive failures before a delay is applied, the delay's growth
+     * factor, and its ceiling. A delay costs an attacker their throughput
+     * while remaining invisible to someone who mistyped a password once.
+     *
+     * Deliberately a DELAY and not a lock: the streak expires on its own, so a
+     * legitimate account can never be held out permanently by someone else's
+     * failed attempts.
+     */
+    backoffAfter: toNumber(process.env.AUTH_BACKOFF_AFTER, 3),
+    backoffBaseMs: toNumber(process.env.AUTH_BACKOFF_BASE_MS, 400),
+    backoffMaxMs: toNumber(process.env.AUTH_BACKOFF_MAX_MS, 8_000),
+    backoffTtlMs: toNumber(process.env.AUTH_BACKOFF_TTL_MS, 30 * 60 * 1000),
+
+    /* ── Uploads ───────────────────────────────────────────────────────── */
     uploadWindowMs: toNumber(process.env.UPLOAD_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     uploadMax: toNumber(process.env.UPLOAD_RATE_LIMIT_MAX, 60),
+
+    /* ── Public writes (the only unauthenticated writes) ───────────────── */
+    publicWriteWindowMs: toNumber(process.env.PUBLIC_WRITE_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+    publicWriteMax: toNumber(process.env.PUBLIC_WRITE_RATE_LIMIT_MAX, 10),
+
+    /* ── Public reads ──────────────────────────────────────────────────── */
+    /**
+     * Deliberately high. These are cached, idempotent reads that every page of
+     * the marketing site depends on, and a limit tight enough to matter to an
+     * attacker would break a legitimate visitor with a warm browser cache.
+     * This is a flood ceiling, not a quota.
+     */
+    publicReadWindowMs: toNumber(process.env.PUBLIC_READ_RATE_LIMIT_WINDOW_MS, 60 * 1000),
+    publicReadMax: toNumber(process.env.PUBLIC_READ_RATE_LIMIT_MAX, 300),
+    /** Search is the expensive shape of a public read; it gets its own budget. */
+    publicSearchWindowMs: toNumber(process.env.PUBLIC_SEARCH_RATE_LIMIT_WINDOW_MS, 60 * 1000),
+    publicSearchMax: toNumber(process.env.PUBLIC_SEARCH_RATE_LIMIT_MAX, 30),
+
     publicDownloadWindowMs: toNumber(process.env.PUBLIC_DOWNLOAD_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     publicDownloadMax: toNumber(process.env.PUBLIC_DOWNLOAD_RATE_LIMIT_MAX, 60),
+
+    /* ── Authenticated writes ──────────────────────────────────────────── */
+    adminWriteWindowMs: toNumber(process.env.ADMIN_WRITE_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    adminWriteMax: toNumber(process.env.ADMIN_WRITE_RATE_LIMIT_MAX, 200),
+    /** Operations that copy or fan out server-side work. */
+    expensiveWindowMs: toNumber(process.env.EXPENSIVE_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    expensiveMax: toNumber(process.env.EXPENSIVE_RATE_LIMIT_MAX, 20),
   },
 
   /**
