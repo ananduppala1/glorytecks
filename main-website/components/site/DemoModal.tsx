@@ -105,6 +105,8 @@ const DemoModal = ({ open, onClose, defaultCourse = "", trigger = "button" }: De
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
                     required
+                    minLength={2}
+                    maxLength={160}
                     value={name}
                     onChange={e => setName(e.target.value)}
                     placeholder="Your Full Name"
@@ -116,6 +118,7 @@ const DemoModal = ({ open, onClose, defaultCourse = "", trigger = "button" }: De
                   <input
                     required
                     type="tel"
+                    maxLength={15}
                     pattern="[0-9]{10,15}"
                     title="Enter a valid phone number (10-15 digits)"
                     value={phone}

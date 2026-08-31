@@ -27,6 +27,27 @@ interface ResourceFormProps<T extends Record<string, unknown>> {
   onCancel?: () => void;
 }
 
+
+/**
+ * Client-side length caps, mirroring the API's `LIMITS` table.
+ *
+ * A field-by-field copy would drift; this maps the FORM field type to the
+ * server's most generous bound for that shape, so the UI never blocks a value
+ * the API would have taken while still catching the obviously-too-long ones
+ * before a round trip. The server remains the only thing that decides.
+ */
+const MAX_LENGTH_BY_TYPE: Record<string, number> = {
+  text: 300,
+  email: 254,
+  url: 2048,
+  slug: 120,
+  textarea: 5000,
+  richtext: 20000,
+};
+
+const maxLengthFor = (f: FieldDef): number | undefined =>
+  f.maxLength ?? MAX_LENGTH_BY_TYPE[f.type];
+
 export function ResourceForm<T extends Record<string, unknown>>({
   fields,
   defaultValues,
@@ -100,7 +121,13 @@ export function ResourceForm<T extends Record<string, unknown>>({
             id={f.name}
             rows={f.type === 'richtext' ? 8 : 3}
             placeholder={f.placeholder}
-            {...register(name, { required: f.required && `${f.label} is required` })}
+            {...register(name, {
+              required: f.required && `${f.label} is required`,
+              maxLength: maxLengthFor(f) && {
+                value: maxLengthFor(f) as number,
+                message: `${f.label} must be at most ${maxLengthFor(f)} characters`,
+              },
+            })}
           />
         );
 
@@ -285,7 +312,13 @@ export function ResourceForm<T extends Record<string, unknown>>({
             id={f.name}
             type={f.type === 'email' ? 'email' : f.type === 'url' ? 'url' : 'text'}
             placeholder={f.placeholder}
-            {...register(name, { required: f.required && `${f.label} is required` })}
+            {...register(name, {
+              required: f.required && `${f.label} is required`,
+              maxLength: maxLengthFor(f) && {
+                value: maxLengthFor(f) as number,
+                message: `${f.label} must be at most ${maxLengthFor(f)} characters`,
+              },
+            })}
           />
         );
     }

@@ -3,7 +3,7 @@ import { adminUserRepo } from '../repositories';
 import { IAdminUser } from '../interfaces/common';
 import { ApiError } from '../utils/ApiError';
 import { logger } from '../config/logger';
-import { Role, ROLES } from '../constants';
+import { Role, ROLES, ALL_ROLES } from '../constants';
 
 export interface AuthTokens {
   accessToken: string;
@@ -227,7 +227,18 @@ export const authService = {
   }): Promise<IAdminUser> {
     const email = String(input.email ?? '').toLowerCase().trim();
     const name = String(input.name ?? '').trim();
-    const role = (input.role ?? ROLES.ADMIN) as Role;
+    // Validated here as well as at the route. This method is also reachable
+    // from the seed scripts, and a cast (`input.role as Role`) asserts a type
+    // rather than checking one — it would happily store "superadmin", which
+    // matches no authorization rule and yields an account nobody can reason
+    // about.
+    const requestedRole = input.role ?? ROLES.ADMIN;
+    if (!ALL_ROLES.includes(requestedRole as Role)) {
+      throw ApiError.unprocessable('Validation failed', [
+        { field: 'role', message: `Role must be one of: ${ALL_ROLES.join(', ')}` },
+      ]);
+    }
+    const role = requestedRole as Role;
 
     if (!name) {
       throw ApiError.unprocessable('Validation failed', [

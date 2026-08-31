@@ -246,6 +246,8 @@ const ContactView = () => {
             <div className="grid sm:grid-cols-2 gap-4">
               <Input
                 required
+                minLength={2}
+                maxLength={160}
                 placeholder="Your Name *"
                 value={form.name}
                 onChange={(e) =>
@@ -259,6 +261,7 @@ const ContactView = () => {
               <Input
                 required
                 type="email"
+                maxLength={254}
                 placeholder="Email Address *"
                 value={form.email}
                 onChange={(e) =>
@@ -273,6 +276,7 @@ const ContactView = () => {
             <Input
               required
               type="tel"
+              maxLength={15}
               pattern="[0-9]{10,15}"
               title="Enter a valid phone number (10-15 digits)"
               placeholder="Phone Number *"
@@ -312,6 +316,8 @@ const ContactView = () => {
 
             <Textarea
               required
+              minLength={5}
+              maxLength={5000}
               placeholder="How can we help? *"
               rows={5}
               value={form.message}

@@ -8,6 +8,7 @@ import { demoRequestController, contactEnquiryController } from '../controllers/
 import { demoRequestValidator, contactEnquiryValidator } from '../validators/lead.validator';
 import { brochureProxyController } from '../controllers/brochure.controller';
 import { publicDownloadLimiter } from '../middlewares/rateLimit';
+import { slugParam, listQueryValidator } from '../validators/common';
 import { CONTENT_STATUS } from '../constants';
 import { cacheWrap, hashQuery, CACHE_TTL } from '../lib/cache';
 import { IBlog } from '../interfaces/common';
@@ -125,6 +126,7 @@ const PUBLIC_BLOG_SEARCH_FIELDS = ['title', 'excerpt', 'category', 'tags'];
 
 router.get(
   '/blogs',
+  validate(listQueryValidator),
   asyncHandler(async (req: Request, res: Response) => {
     const params = parseListParams(req.query as Record<string, unknown>, [
       'categorySlug',
@@ -185,6 +187,7 @@ router.get(
  */
 router.get(
   '/blogs/:slug/context',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:blogs:context:${slug}`;
@@ -262,6 +265,7 @@ router.get(
 
 router.get(
   '/blogs/:slug',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:blogs:slug:${slug}`;
@@ -299,6 +303,7 @@ router.get(
 
 router.get(
   '/courses/:slug',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:courses:slug:${slug}`;
@@ -434,6 +439,7 @@ simpleCollection(
 router.get(
   '/brochures/:courseSlug/download',
   publicDownloadLimiter,
+  validate(slugParam('courseSlug')),
   brochureProxyController.stream,
 );
 
@@ -447,6 +453,7 @@ simpleCollection(
 /* ── Single-doc lookups by slug ────────────────────────────────────────── */
 router.get(
   '/comparisons/:slug',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:comparisons:slug:${slug}`;
@@ -462,6 +469,7 @@ router.get(
 
 router.get(
   '/legal/:slug',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:legal:slug:${slug}`;
@@ -477,6 +485,7 @@ router.get(
 
 router.get(
   '/localities/:slug',
+  validate(slugParam()),
   asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug.toLowerCase();
     const cacheKey = `public:localities:slug:${slug}`;

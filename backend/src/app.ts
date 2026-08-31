@@ -13,6 +13,7 @@ import {
   CORS_REJECTION,
 } from './middlewares/error';
 import { guardMediaUrls } from './middlewares/validate';
+import { guardPayloadShape } from './validators/common';
 import apiRouter from './routes';
 
 const app: Application = express();
@@ -77,6 +78,13 @@ app.use(env.apiPrefix, (req, res, next) => {
   if (req.path.startsWith('/public') && req.method === 'GET') return next();
   return apiLimiter(req, res, next);
 });
+
+/* ── Payload shape ─────────────────────────────────────────────────────── */
+// Depth, node count and array width, applied to every mutating request before
+// any route-specific validator runs. express.json's byte limit bounds how much
+// is read, not what shape it takes — 2 MB of deeply nested arrays parses
+// within it and costs far more than 2 MB to process afterwards.
+app.use(env.apiPrefix, guardPayloadShape);
 
 /* ── Media URL safety ──────────────────────────────────────────────────── */
 // Applies to every mutating request, on every route, before any controller

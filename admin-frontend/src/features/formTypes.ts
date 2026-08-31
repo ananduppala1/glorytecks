@@ -45,6 +45,15 @@ export interface FieldDef {
   uploadFolder?: string;
   /** For 'file' — accepted document upload vs image. */
   accept?: 'image' | 'document';
+  /**
+   * Longest value the server will accept for this field.
+   *
+   * Purely a convenience: it stops an editor writing 6,000 characters into a
+   * field the API caps at 300 and only finding out on save. The API rejects
+   * an over-long value regardless of what this says, and nothing here is
+   * relied upon for correctness.
+   */
+  maxLength?: number;
 }
 
 export interface ResourceConfig<T extends { id: string } = { id: string }> {

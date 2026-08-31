@@ -106,6 +106,38 @@ export const env = {
   },
 
   /**
+   * Request payload limits.
+   *
+   * These bound the SHAPE of a request, which `express.json`'s byte limit does
+   * not: 2 MB of deeply nested arrays parses within that limit and then costs
+   * far more than 2 MB to walk, validate, store and re-serve. Environment
+   * configurable because the right ceiling depends on the instance's memory
+   * and on how large a legitimate blog post is allowed to get.
+   */
+  payload: {
+    /** Nesting depth of a request body. */
+    maxDepth: toNumber(process.env.PAYLOAD_MAX_DEPTH, 12),
+    /** Total values (objects, arrays and scalars) in one body. */
+    maxNodes: toNumber(process.env.PAYLOAD_MAX_NODES, 20_000),
+    /** Properties on any single object. */
+    maxKeys: toNumber(process.env.PAYLOAD_MAX_KEYS, 200),
+    /** Entries in any single array. */
+    maxArrayLength: toNumber(process.env.PAYLOAD_MAX_ARRAY_LENGTH, 1_000),
+
+    /**
+     * Pagination ceilings. `maxPage` matters as much as `maxLimit`: an
+     * unbounded page number becomes an unbounded OFFSET, and Postgres reaches
+     * a large offset by walking every row before it.
+     */
+    maxLimit: toNumber(process.env.LIST_MAX_LIMIT, 100),
+    maxPage: toNumber(process.env.LIST_MAX_PAGE, 10_000),
+    /** Characters accepted in a search term. */
+    maxSearchLength: toNumber(process.env.LIST_MAX_SEARCH_LENGTH, 120),
+    /** Sort keys accepted in one request. */
+    maxSortKeys: toNumber(process.env.LIST_MAX_SORT_KEYS, 4),
+  },
+
+  /**
    * File-upload policy. Every threshold is environment-configurable so it can
    * be tightened per deployment without a code change; the defaults below are
    * the SECURE defaults, not the permissive ones.

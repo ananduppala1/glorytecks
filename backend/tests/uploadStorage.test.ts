@@ -234,7 +234,14 @@ test('the brochure proxy rejects a malformed course slug outright', async () => 
   storedBrochure('https://res.cloudinary.com/a.pdf');
   for (const slug of ['..%2f..%2fetc', 'a'.repeat(300), '-leading']) {
     const res = await get(`/public/brochures/${slug}/download`);
-    assert.equal(res.status, 404);
+    // 422 from the route's slug validator, or 404 from the controller's own
+    // check. Both refuse before the slug reaches a cache key or an outbound
+    // request; the controller keeps its copy so the guarantee does not depend
+    // on the route wiring staying as it is.
+    assert.ok(
+      res.status === 404 || res.status === 422,
+      `a malformed slug must be refused, got ${res.status}`,
+    );
   }
   mock.restoreAll();
 });

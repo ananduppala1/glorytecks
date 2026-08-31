@@ -31,3 +31,33 @@ process.env.CLOUDINARY_API_SECRET = '';
 // would never run under test and a regression in it would go unnoticed.
 process.env.CORS_ORIGINS = process.env.CORS_ORIGINS ?? 'https://admin.glorytecks.test';
 process.env.PUBLIC_CORS_ORIGINS = process.env.PUBLIC_CORS_ORIGINS ?? 'https://glorytecks.test';
+
+/**
+ * Fail Supabase calls immediately instead of waiting on a real connection.
+ *
+ * Many tests assert that a request PASSED validation by checking it got as far
+ * as the database and failed there. Left alone, each of those waits for
+ * supabase-js to attempt a connection and retry, which turned the suite into a
+ * multi-minute run for no added coverage.
+ *
+ * The rejection deliberately mimics the exact shape Node produces for a
+ * refused connection — a `TypeError: fetch failed` with the errno on `cause` —
+ * because that shape is itself under test: it is what `isConnectivityFailure`
+ * has to see through in order to answer 503 rather than 500.
+ */
+const realFetch = globalThis.fetch;
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(
+    typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url,
+  );
+  if (url.includes('127.0.0.1:54321')) {
+    return Promise.reject(
+      Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:54321'), {
+          code: 'ECONNREFUSED',
+        }),
+      }),
+    );
+  }
+  return realFetch(input, init);
+}) as typeof fetch;

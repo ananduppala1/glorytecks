@@ -339,7 +339,11 @@ export function buildSelect(
  */
 export function resolveColumn(def: TableDef, field: string): string | null {
   if (field === 'id') return 'id';
-  if (def.columns[field]) return def.columns[field];
+  // hasOwnProperty, not a bare lookup: `def.columns['constructor']` walks the
+  // prototype chain and returns a truthy FUNCTION, which would then be handed
+  // to PostgREST as a column name. `field` is client-controlled on the sort
+  // parameter, so `?sort=constructor` reached this line.
+  if (Object.prototype.hasOwnProperty.call(def.columns, field)) return def.columns[field];
   const rel = (def.relations ?? []).find((r) => r.field === field);
   if (rel) return rel.column;
   // Allow sorting/filtering on a flattened leaf, e.g. "seo.metaTitle".
