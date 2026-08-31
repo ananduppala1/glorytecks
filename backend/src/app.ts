@@ -32,35 +32,114 @@ app.set('trust proxy', env.rateLimit.trustProxyHops);
 /* ── Security headers ──────────────────────────────────────────────────── */
 app.use(
   helmet({
+    // Cloudinary-hosted media and the brochure stream are read cross-origin by
+    // the marketing site, so resources must remain fetchable from another origin.
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: false, // API only; CSP handled by the frontend host
+
+    /**
+     * A restrictive CSP even though this is an API.
+     *
+     * It was previously disabled with "CSP handled by the frontend host",
+     * which was true until this service started returning content of its own:
+     * the brochure proxy streams a file from THIS origin, and Express's own
+     * fallback handler emits HTML. `default-src 'none'` costs a JSON API
+     * nothing and means any HTML that ever leaves here can load and execute
+     * nothing at all. The brochure route sets its own, stricter, sandboxed
+     * policy which replaces this one for that response.
+     */
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        'default-src': ["'none'"],
+        'frame-ancestors': ["'none'"],
+        'base-uri': ["'none'"],
+        'form-action': ["'none'"],
+      },
+    },
+
+    // Nothing this API returns is meant to be framed. DENY rather than
+    // SAMEORIGIN because the API has no pages of its own to frame.
+    frameguard: { action: 'deny' },
+    hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
   }),
 );
 
+// helmet does not set this one. Meaningless for JSON, free to add, and it
+// applies to the brochure response that a browser may render directly.
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()');
+  next();
+});
+
 /* ── CORS ──────────────────────────────────────────────────────────────── */
-// Admin endpoints: restrict to configured admin origins (credentials allowed for cookies).
-// Public endpoints: a permissive policy so the marketing site can read content.
+//
+// TWO policies, because this API serves two audiences with different trust.
+//
+// A single policy with `credentials: true` and a permissive origin list — what
+// this previously had, with PUBLIC_CORS_ORIGINS defaulting to "*" — reflects
+// ANY website's origin back with `Access-Control-Allow-Credentials: true`, on
+// every route. `/auth/refresh` authenticates with an httpOnly cookie and
+// returns a fresh access token in its body, so that combination means any page
+// on the internet can mint an admin session and read the token. Today the only
+// thing preventing it is the cookie's SameSite=lax — and a deployment that
+// puts the admin panel on a different site than the API has to set
+// SameSite=none, at which point the last barrier is gone.
+//
+// So credentials and wildcards are never combined:
+//
+//   admin  — everything except /public. Strict allowlist, credentials allowed.
+//   public — /public/*. May be open to any origin, but credentials are OFF, so
+//            a browser sends no cookies and the response contains only what is
+//            already public on the marketing site.
+
 const adminOrigins = env.cors.adminOrigins;
 const publicAllowsAll = env.cors.publicOrigins === '*';
 const publicOrigins = publicAllowsAll ? [] : env.cors.publicOrigins.split(',').map((s) => s.trim());
 
-const corsOptions: CorsOptions = {
+/** Authenticated surface: named origins only, credentials permitted. */
+const adminCorsOptions: CorsOptions = {
   origin(origin, callback) {
-    // Allow same-origin / server-to-server (no Origin header) and curl/health checks.
+    // No Origin header: same-origin, server-to-server, curl, health checks.
     if (!origin) return callback(null, true);
     if (adminOrigins.includes(origin)) return callback(null, true);
-    if (publicAllowsAll || publicOrigins.includes(origin)) return callback(null, true);
-    // A fixed sentinel, not a descriptive message. The error handler turns
-    // this into a plain 403; the previous message was echoed to the caller as
-    // a 500 body that repeated their origin and named the policy that blocked
-    // it.
+    // A fixed sentinel, not a descriptive message. The error handler turns this
+    // into a plain 403; a descriptive one was previously echoed back as a 500
+    // that repeated the caller's origin and named the policy that blocked it.
     return callback(new Error(CORS_REJECTION));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 600,
 };
-app.use(cors(corsOptions));
+
+/**
+ * Public surface: the marketing site's reads and its two form posts.
+ *
+ * `credentials: false` is the load-bearing line. It is what makes a permissive
+ * origin list safe: the browser attaches no cookies, so there is no session to
+ * ride, and the response carries only published content.
+ */
+const publicCorsOptions: CorsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (publicAllowsAll || publicOrigins.includes(origin)) return callback(null, true);
+    if (adminOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(CORS_REJECTION));
+  },
+  credentials: false,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  maxAge: 600,
+};
+
+const adminCors = cors(adminCorsOptions);
+const publicCors = cors(publicCorsOptions);
+const PUBLIC_PREFIX = `${env.apiPrefix}/public`;
+
+app.use((req, res, next) =>
+  req.path.startsWith(PUBLIC_PREFIX) ? publicCors(req, res, next) : adminCors(req, res, next),
+);
 
 /* ── Correlation id ────────────────────────────────────────────────────── */
 // Assigned before anything can fail, so every log line and every error

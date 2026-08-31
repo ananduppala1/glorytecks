@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/Field';
+import { safeRedirectPath } from '@/lib/safeUrl';
 
 interface LoginForm {
   email: string;
@@ -25,7 +26,12 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({ defaultValues: { email: '', password: '' } });
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
+  // Where the visitor was heading before ProtectedRoute intercepted them.
+  // It originates in the URL, so it is validated as an in-app path before it
+  // can become a navigation target — see safeRedirectPath.
+  const from = safeRedirectPath(
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname,
+  );
 
   if (!isLoading && isAuthenticated) return <Navigate to={from} replace />;
 

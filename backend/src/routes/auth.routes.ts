@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
-import { requireAuth } from '../middlewares/auth';
+import { requireAuth, requireJsonRequest } from '../middlewares/auth';
 import { validate } from '../middlewares/validate';
 import {
   loginProtection,
@@ -24,7 +24,12 @@ router.post('/login', ...loginProtection, validate(loginValidator), authControll
 // Refresh was previously unlimited: the cookie is the credential, so an
 // attacker holding a stolen refresh token could exchange it without any
 // ceiling, and an anonymous caller could probe it indefinitely.
-router.post('/refresh', refreshLimiter, authController.refresh);
+// `requireJsonRequest` is the CSRF control here: this endpoint authenticates
+// with the refresh cookie, and a cross-site HTML form post is a "simple"
+// request that never triggers a CORS preflight. Demanding a JSON content type
+// makes the request non-simple, so the browser must preflight it and the CORS
+// policy gets to refuse.
+router.post('/refresh', refreshLimiter, requireJsonRequest, authController.refresh);
 router.post('/logout', requireAuth, authController.logout);
 router.get('/me', requireAuth, authController.me);
 router.patch('/profile', requireAuth, validate(updateProfileValidator), authController.updateProfile);

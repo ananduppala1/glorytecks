@@ -322,6 +322,22 @@ router.get(
 );
 
 /* ── Simple collections (active/published, ordered) ────────────────────── */
+/**
+ * Hard ceiling on rows returned by an unpaginated public collection.
+ *
+ * These endpoints deliberately return a whole collection — the marketing site
+ * renders all trainers, all FAQs — so there is no page parameter to bound them.
+ * Row counts are admin-controlled, so this is not attacker-reachable today; it
+ * bounds the payload as content grows rather than defending against a request.
+ * Set high enough to be invisible: no collection here is near it.
+ */
+const PUBLIC_COLLECTION_MAX = toNumberEnv(process.env.PUBLIC_COLLECTION_MAX, 1000);
+
+function toNumberEnv(value: string | undefined, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 const simpleCollection = (
   path: string,
   resource: string,
@@ -333,7 +349,8 @@ const simpleCollection = (
     asyncHandler(async (_req: Request, res: Response) => {
       const cacheKey = `public:${resource}:all`;
       const items = await cacheWrap(cacheKey, CACHE_TTL.SIMPLE, loader);
-      return sendSuccess(res, items, label);
+      const bounded = Array.isArray(items) ? items.slice(0, PUBLIC_COLLECTION_MAX) : items;
+      return sendSuccess(res, bounded, label);
     }),
   );
 

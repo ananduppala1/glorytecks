@@ -172,7 +172,31 @@ export const env = {
   },
 
   cors: {
-    adminOrigins: list(process.env.CORS_ORIGINS) || ['http://localhost:5000'],
+    /**
+     * Origins allowed to make CREDENTIALED requests (the admin panel).
+     *
+     * The previous expression was `list(...) || ['http://localhost:5000']`,
+     * which never used its fallback: an empty array is truthy in JavaScript,
+     * so an unset CORS_ORIGINS produced `[]` rather than the dev default.
+     * That failed closed, which is the right direction, but silently — the
+     * admin panel simply stopped working with no explanation.
+     */
+    adminOrigins: (() => {
+      const configured = list(process.env.CORS_ORIGINS);
+      if (configured.length > 0) return configured;
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'CORS_ORIGINS must list the admin panel origin(s) in production. ' +
+            'Credentialed cross-origin requests are refused without it.',
+        );
+      }
+      return ['http://localhost:5173', 'http://localhost:5000'];
+    })(),
+
+    /**
+     * Origins allowed to read the PUBLIC API. May be '*' — that is safe only
+     * because the public policy sets `credentials: false` (see app.ts).
+     */
     publicOrigins: process.env.PUBLIC_CORS_ORIGINS ?? '*',
   },
 

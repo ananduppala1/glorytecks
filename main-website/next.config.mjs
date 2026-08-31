@@ -29,9 +29,16 @@ const backendOrigin = (() => {
   }
 })();
 
+// NOTE ON `script-src`:
+//   'unsafe-inline' and 'unsafe-eval' remain below because Next.js emits an
+//   inline bootstrap script and Google Tag Manager evaluates its container at
+//   runtime. Removing them requires per-request nonces from a middleware, which
+//   is an architectural change rather than a config edit — it is recorded as an
+//   accepted risk with a defined next step, not silently tolerated. Every other
+//   directive is tightened to compensate.
 const csp = [
   "default-src 'self'",
-  `connect-src 'self' ${backendOrigin} https://glorytecks-backend.vercel.app https://backendforglory-production.up.railway.app https://wa.me https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://stats.g.doubleclick.net https://region1.google-analytics.com https: wss:`,
+  `connect-src 'self' ${backendOrigin} https://glorytecks-backend.vercel.app https://backendforglory-production.up.railway.app https://wa.me https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://stats.g.doubleclick.net https://region1.google-analytics.com`,
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://maps.google.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://tagmanager.google.com https://*.googletagmanager.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://tagmanager.google.com",
   "font-src 'self' https://fonts.gstatic.com data:",
@@ -39,6 +46,12 @@ const csp = [
   'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.google.com https://maps.google.com https://www.googletagmanager.com',
   "base-uri 'self'",
   "form-action 'self'",
+  // No plugin content at all: <object>/<embed> are a script-execution route
+  // that nothing on this site uses.
+  "object-src 'none'",
+  // The CSP-level equivalent of the X-Frame-Options header below, which modern
+  // browsers prefer.
+  "frame-ancestors 'self'",
 ].join('; ');
 
 const securityHeaders = [

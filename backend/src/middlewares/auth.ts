@@ -92,3 +92,32 @@ export const authorize =
     }
     return next();
   };
+
+/**
+ * Require a request that a cross-site HTML form cannot produce.
+ *
+ * For endpoints authenticated by the refresh COOKIE rather than by a bearer
+ * token, CORS is not the whole story. A browser refuses to let a page *read*
+ * a cross-origin response, but it still *sends* "simple" requests — and a
+ * plain `<form method="post">` is simple, so it never triggers a preflight and
+ * the CORS policy never gets to object. If the cookie is attached (which it is
+ * whenever a deployment needs `SameSite=none`, because the admin panel and the
+ * API are on different sites), an attacker's page can silently make the
+ * browser rotate the victim's refresh token. They cannot read the new token —
+ * but rotation invalidates the old one, so the victim is logged out. That is a
+ * denial of service delivered by any web page the admin happens to visit.
+ *
+ * Requiring a JSON content type closes it without any token infrastructure: a
+ * form can only send `application/x-www-form-urlencoded`, `multipart/form-data`
+ * or `text/plain`, so demanding `application/json` forces a real preflight,
+ * which the CORS policy then answers for.
+ *
+ * SameSite=lax already blocks this on the default configuration. This is the
+ * control that survives a deployment which cannot use it.
+ */
+export function requireJsonRequest(req: Request, _res: Response, next: NextFunction): void {
+  // No body at all is fine — the refresh token normally travels in the cookie.
+  const contentType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  if (contentType === '' || contentType === 'application/json') return next();
+  next(ApiError.badRequest('This endpoint accepts application/json only'));
+}
