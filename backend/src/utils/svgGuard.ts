@@ -144,14 +144,15 @@ export function validateSvg(buf: Buffer): SvgVerdict {
   // stripping did not splice new markup together.
   const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
 
-  const tagPattern = /<\s*([/]?)\s*([A-Za-z_][-A-Za-z0-9_:.]*)([^>]*)>/g;
-  let match: RegExpExecArray | null;
+  const scan = scanTags(withoutComments);
+  if ('reason' in scan) return { ok: false, reason: scan.reason };
+
   let sawSvgRoot = false;
 
-  while ((match = tagPattern.exec(withoutComments)) !== null) {
-    const name = match[2].toLowerCase();
+  for (const tag of scan.tags) {
+    const name = tag.name.toLowerCase();
     const local = name.includes(':') ? name.slice(name.indexOf(':') + 1) : name;
-    const attrs = match[3] ?? '';
+    const attrs = tag.attrs;
 
     if (FORBIDDEN_ELEMENTS.has(local)) {
       return { ok: false, reason: `SVG contains a disallowed element: <${local}>` };
@@ -172,6 +173,96 @@ export function validateSvg(buf: Buffer): SvgVerdict {
 
   if (!sawSvgRoot) return { ok: false, reason: 'SVG has no root element' };
   return { ok: true };
+}
+
+interface ScannedTag {
+  /** Element name as written, including any namespace prefix. */
+  name: string;
+  /** Everything between the element name and the closing `>`. */
+  attrs: string;
+}
+
+/**
+ * Split a document into its tags, tracking quotes.
+ *
+ * A regex of the form `<name([^>]*)>` cannot do this: `>` is legal inside a
+ * quoted attribute value, so `<rect fill="x>" onload="alert(1)"/>` ends the
+ * match at the `>` inside `fill`, leaving `onload` outside every group the
+ * attribute checks ever see. The remainder then contains no `<`, so the scan
+ * simply ends and the handler is admitted. That is a full bypass of every
+ * per-attribute rule below, so the tag boundary has to be found by walking the
+ * text and honouring quotes rather than by a character class.
+ *
+ * Anything that cannot be tokenised — an unterminated tag, an unbalanced quote,
+ * a stray `<` inside a tag — is an ERROR rather than a skip. A construct this
+ * cannot parse is one whose meaning in a browser it cannot predict, and the
+ * module's contract is to refuse those rather than pass them through.
+ */
+function scanTags(text: string): { tags: ScannedTag[] } | { reason: string } {
+  const tags: ScannedTag[] = [];
+  const isNameChar = (c: string) => /[-A-Za-z0-9_:.]/.test(c);
+  let i = 0;
+
+  while (i < text.length) {
+    const lt = text.indexOf('<', i);
+    if (lt < 0) break;
+
+    // Comments are stripped before this runs; a surviving `<!--` means the
+    // stripper found no terminator.
+    if (text.startsWith('<!--', lt)) {
+      return { reason: 'SVG contains an unterminated comment' };
+    }
+    // `<?xml version="1.0"?>` is the one processing instruction that reaches
+    // here — `<?xml-stylesheet` is rejected above.
+    if (text.startsWith('<?', lt)) {
+      const end = text.indexOf('?>', lt + 2);
+      if (end < 0) return { reason: 'SVG contains an unterminated processing instruction' };
+      i = end + 2;
+      continue;
+    }
+    // DOCTYPE, ENTITY and CDATA are all rejected above, so any other `<!` is
+    // a markup declaration this gate does not model.
+    if (text.startsWith('<!', lt)) {
+      return { reason: 'SVG contains an unrecognised markup declaration' };
+    }
+
+    let j = lt + 1;
+    if (text[j] === '/') j += 1;
+
+    const nameStart = j;
+    while (j < text.length && isNameChar(text[j])) j += 1;
+    const name = text.slice(nameStart, j);
+    if (!name) return { reason: 'SVG contains a malformed tag' };
+
+    // Walk to the `>` that actually closes the tag, treating quoted regions as
+    // opaque so a `>` inside a value does not end it early.
+    const attrStart = j;
+    let quote: string | null = null;
+    let closed = false;
+    while (j < text.length) {
+      const c = text[j];
+      if (quote) {
+        if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === '>') {
+        closed = true;
+        break;
+      } else if (c === '<') {
+        // A `<` before the tag closed means the previous one never did.
+        return { reason: 'SVG contains a malformed tag' };
+      }
+      j += 1;
+    }
+    if (!closed) {
+      return { reason: quote ? 'SVG contains an unbalanced quote' : 'SVG contains an unterminated tag' };
+    }
+
+    tags.push({ name, attrs: text.slice(attrStart, j) });
+    i = j + 1;
+  }
+
+  return { tags };
 }
 
 const ATTR_PATTERN = /([-A-Za-z0-9_:.]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>=`]+))/g;

@@ -372,6 +372,61 @@ test('a scheme split by a control character is still caught', () => {
   assert.equal(validateSvg(split).ok, false);
 });
 
+/**
+ * `>` is legal inside a quoted attribute value, and browsers parse it as data
+ * rather than as the end of the tag. A tag matcher built on `[^>]*` disagrees:
+ * it ends the tag at that `>`, so every attribute after it falls outside the
+ * region the rules are applied to — and since the leftover text holds no `<`,
+ * the scan just ends. That admitted a live event handler.
+ */
+test('an attribute value containing ">" cannot hide the attributes after it', () => {
+  const smuggled = [
+    '<rect fill="x>" onload="alert(1)" width="1" height="1"/>',
+    "<rect fill='x>' onload='alert(1)' width='1' height='1'/>",
+    '<use id="q>" href="javascript:alert(1)"/>',
+    '<rect id="a>" style="fill:url(https://evil.test/x)" width="1" height="1"/>',
+    '<g id="a>" xmlns:h="http://www.w3.org/1999/xhtml"/>',
+    '<rect a="1>" b="2>" onmouseover="alert(1)" width="1" height="1"/>',
+    '<g id="a>"><foreignObject/></g>',
+  ];
+  for (const inner of smuggled) {
+    assert.equal(validateSvg(svg(inner)).ok, false, `should refuse: ${inner}`);
+  }
+
+  // The same trick on the root element, where there is no enclosing tag.
+  const root = Buffer.from(
+    '<svg id="a>" onload="alert(1)" xmlns="http://www.w3.org/2000/svg"/>',
+    'utf8',
+  );
+  assert.equal(validateSvg(root).ok, false);
+});
+
+test('markup the guard cannot tokenise is refused rather than skipped', () => {
+  const unparseable = [
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="x onload=alert(1)>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="x"',
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect <script>alert(1)</script>',
+    '<?xml version="1.0"<svg xmlns="http://www.w3.org/2000/svg"/>',
+  ];
+  for (const doc of unparseable) {
+    assert.equal(validateSvg(Buffer.from(doc, 'utf8')).ok, false, `should refuse: ${doc}`);
+  }
+});
+
+test('the simple marks the guard exists to admit still pass', () => {
+  const fine = [
+    '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><linearGradient id="g"><stop offset="0" stop-color="#fff"/></linearGradient></defs><rect fill="url(#g)" width="10" height="10"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><symbol id="s"><circle r="4"/></symbol></defs><use href="#s"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><title>Logo</title><desc>A mark</desc><g><path d="M0 0"/></g></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg"><!-- a note --><rect width="4" height="4"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+  ];
+  for (const doc of fine) {
+    const verdict = validateSvg(Buffer.from(doc, 'utf8'));
+    assert.equal(verdict.ok, true, `should accept: ${doc} (${!verdict.ok ? verdict.reason : ''})`);
+  }
+});
+
 /* ── filenames ──────────────────────────────────────────────────────────── */
 
 test('filenames are stripped to something safe to store and display', () => {
