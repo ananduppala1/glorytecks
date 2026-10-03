@@ -189,6 +189,42 @@ router.get(
  * Related-post ranking stays in JavaScript rather than becoming SQL: it is the
  * same tag-overlap scoring as before, so results are identical.
  */
+/**
+ * Sitemap feed — every published post's URL data in ONE query.
+ *
+ * The website's sitemap generator previously walked `/public/blogs` page by
+ * page at the endpoint's 24-item cap. With 597 published posts that is 25
+ * requests, and `/sitemaps/blog.xml` and `/sitemaps/categories.xml` each ran
+ * their own walk — **~50 requests and ~50 PostgREST round trips every hour**,
+ * to produce a list of slugs and dates.
+ *
+ * This returns exactly the four columns a sitemap needs, for the whole
+ * archive, in a single indexed query (`blogs_status_date_idx`). No body, no
+ * content blocks, no author join — a sitemap does not need them, and shipping
+ * them was most of the cost.
+ *
+ * Deliberately unpaginated but hard-bounded by SITEMAP_MAX_ROWS: the response
+ * is a few tens of KB at the current archive size and the cap keeps it from
+ * becoming unbounded as content grows.
+ */
+const SITEMAP_MAX_ROWS = 5000;
+
+router.get(
+  '/blogs/sitemap',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const items = await cacheWrap('public:blogs:sitemap', CACHE_TTL.BLOGS, async () => {
+      return blogRepo.findMany({
+        filter: { status: CONTENT_STATUS.PUBLISHED },
+        sort: [{ field: 'date', direction: -1 }],
+        limit: SITEMAP_MAX_ROWS,
+        fields: ['slug', 'date', 'updated', 'categorySlug'],
+      });
+    });
+
+    return sendSuccess(res, items, 'Blog sitemap feed');
+  }),
+);
+
 router.get(
   '/blogs/:slug/context',
   validate(slugParam()),

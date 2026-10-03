@@ -1,20 +1,31 @@
 import 'server-only';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sitemap data.
+// Sitemap data loaders.
 //
 // The React app shipped five hand-maintained XML files in /public totalling
-// ~14,000 lines, all stamped 2026-06-24. Every new post, course or comparison
-// silently fell out of the index until someone remembered to regenerate them.
-// They are now built from the live backend on a revalidation schedule.
+// ~14,000 lines, all stamped 2026-06-24. They are now built from the live
+// backend on a revalidation schedule.
 //
-// All four public sitemap URLs are preserved byte-for-byte in path
-// (/sitemap.xml, /blog-sitemap.xml, /category-sitemap.xml, /image-sitemap.xml,
-// /sitemap-index.xml) so nothing already submitted to Search Console breaks.
+// This module fetches; `lib/seo/sitemap.ts` decides shape and validity. The
+// split exists so the XML rules are unit-testable without a backend.
+//
+// Every <lastmod> emitted from here is a REAL content date taken from the CMS
+// row (`updatedAt`) or from the post's own published/updated fields. Nothing
+// substitutes the current date — see `isoDate()` in lib/seo/sitemap.ts, which
+// returns null rather than "today" when a date is missing or malformed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as api from '@/lib/api/services';
 import { safe } from '@/lib/site-data';
+import { canonicalUrl } from '@/lib/seo/canonical';
+import {
+  contentLastModified,
+  isoDate,
+  sanitizeEntries,
+  type SitemapEntry,
+} from '@/lib/seo/sitemap';
+import type { BlogSitemapItem } from '@/lib/api/services';
 import type { BlogPost } from '@/types/content';
 
 /** Sitemaps are rebuilt hourly — often enough for a content site, cheap enough. */
@@ -31,6 +42,30 @@ export const SITEMAP_REVALIDATE = 3600;
  */
 const BLOG_PAGE_LIMIT = 24;
 const MAX_PAGES = 50;
+
+/**
+ * Every published post's sitemap record, in ONE upstream request.
+ *
+ * `fetchAllBlogPosts()` below walks the paginated list endpoint at its 24-item
+ * cap — 25 requests for the current archive, run by two different sitemaps, so
+ * ~50 per hour to produce a list of slugs and dates. This asks the backend's
+ * dedicated feed instead, which answers from a single indexed query.
+ *
+ * Falls back to the page walk if the endpoint is unavailable (an older backend
+ * deploy), so the sitemap degrades to the old cost rather than going empty.
+ */
+export async function fetchBlogSitemapRecords(): Promise<BlogSitemapItem[]> {
+  const feed = await safe(() => api.fetchBlogSitemapFeed(), [], 'sitemap:blogs:feed');
+  if (feed.length > 0) return feed;
+
+  const walked = await fetchAllBlogPosts();
+  return walked.map((p) => ({
+    slug: p.slug,
+    date: p.date,
+    updated: p.updated,
+    categorySlug: p.categorySlug,
+  }));
+}
 
 export async function fetchAllBlogPosts(): Promise<BlogPost[]> {
   const all: BlogPost[] = [];
@@ -57,24 +92,26 @@ export async function fetchAllBlogPosts(): Promise<BlogPost[]> {
   return all;
 }
 
-/** ISO date (yyyy-mm-dd) for <lastmod>, tolerant of malformed input. */
-export function isoDate(value?: string): string {
-  if (!value) return new Date().toISOString().slice(0, 10);
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? new Date().toISOString().slice(0, 10)
-    : d.toISOString().slice(0, 10);
-}
+/** The real content date for one post: updated when genuinely updated, else published. */
+export const blogLastModified = (post: {
+  updated?: string | null;
+  date?: string | null;
+}): string | null => contentLastModified(post.updated, post.date);
 
-/** Escape the five XML entities — CMS titles routinely contain & and '. */
-export function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+/** Build an entry, letting `lastModified` be null so <lastmod> is simply omitted. */
+export const entry = (path: string, lastModified: string | null): SitemapEntry => ({
+  url: canonicalUrl(path),
+  lastModified,
+});
+
+/**
+ * Final gate before XML is written: anything non-canonical, query-bearing or
+ * duplicated is dropped rather than published. A sitemap that lists a bad URL
+ * is worse than one that lists fewer.
+ */
+export const finalise = (entries: SitemapEntry[]): SitemapEntry[] => sanitizeEntries(entries);
+
+export { isoDate };
 
 export const xmlResponse = (body: string) =>
   new Response(body, {

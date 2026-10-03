@@ -46,6 +46,34 @@ function png(extra: Buffer = Buffer.alloc(0)): Buffer {
 }
 
 /** A structurally valid JPEG: SOI, APP0, SOS, entropy data, EOI. */
+/** A valid PNG whose early text metadata happens to contain HTML-looking bytes. */
+function pngWithMarkupMetadata(): Buffer {
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    return Buffer.concat([len, Buffer.from(type, 'latin1'), data, Buffer.alloc(4)]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const metadata = Buffer.from('Comment\0<html><body>this is metadata, not an HTML document</body></html>', 'latin1');
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('tEXt', metadata),
+    chunk('IDAT', Buffer.alloc(32)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+test('a valid binary image with HTML-looking metadata is accepted', () => {
+  const result = inspectBuffer(pngWithMarkupMetadata(), OPTS);
+  assert.equal(result.ok, true, result.ok ? '' : result.reason);
+  if (result.ok) assert.equal(result.format.id, 'png');
+});
+
 function jpeg(extra: Buffer = Buffer.alloc(0)): Buffer {
   const app0 = Buffer.concat([
     Buffer.from([0xff, 0xe0, 0x00, 0x10]),

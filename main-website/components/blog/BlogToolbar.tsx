@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/reveal';
 import { ChevronLeft, ChevronRight, ChevronDown, Search, X } from 'lucide-react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { CategoryKnowledge } from '@/types/content';

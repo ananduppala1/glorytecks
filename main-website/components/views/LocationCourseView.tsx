@@ -1,7 +1,15 @@
 "use client";
 
+// Still a Client Component, but no longer because of an animation library.
+// It reads contact details from the SiteDataProvider React context via
+// useContactInfo(). Framer Motion is gone (see components/ui/reveal.tsx), so
+// the JS this now ships is its own logic rather than 62 KB of animation
+// runtime. To finish the conversion, the page would pass the derived contact
+// info down as a prop instead of reading context — tracked in
+// docs/PERFORMANCE_AUDIT.md.
+
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 import { ArrowRight, MapPin, Clock, Briefcase, TrendingUp, MessageCircle, Phone, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useContactInfo, whatsappLink } from "@/components/site/SiteDataProvider";

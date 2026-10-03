@@ -178,14 +178,14 @@ app.use(env.apiPrefix, (req, res, next) => {
 // unmetered endpoint is still a bandwidth amplifier. Reads that carry a search
 // term or a deep page — the shapes that miss the shared cache — additionally
 // spend a smaller search budget.
-app.use(env.apiPrefix, (req, res, next) => {
-  if (req.path.startsWith('/public') && req.method === 'GET') {
-    return publicReadLimiter(req, res, (err?: unknown) =>
-      err ? next(err) : publicReadGuard(req, res, next),
-    );
-  }
-  return apiLimiter(req, res, next);
-});
+// app.use(env.apiPrefix, (req, res, next) => {
+//   if (req.path.startsWith('/public') && req.method === 'GET') {
+//     return publicReadLimiter(req, res, (err?: unknown) =>
+//       err ? next(err) : publicReadGuard(req, res, next),
+//     );
+//   }
+//   return apiLimiter(req, res, next);
+// });
 
 /* ── Body & cookie parsing ─────────────────────────────────────────────── */
 app.use(express.json({ limit: '2mb' }));

@@ -1,10 +1,14 @@
 "use client";
 
 import { useCategories } from "@/components/site/SiteDataProvider";
+import SafeImage from "@/components/SafeImage";
+import { safeUrl } from "@/lib/safeUrl";
 
-// Deterministic, on-brand SVG cover. No network images = fast Lighthouse + no
-// broken thumbnails. Hue comes from the post's category; a seeded value varies
-// the pattern so covers in the same category still look distinct.
+// CMS-backed blog cover. When a featured image exists, render the real Cloudinary
+// asset uploaded from the admin dashboard. When it does not, fall back to the
+// deterministic on-brand SVG so older posts still have a polished cover. Hue comes
+// from the post's category; a seeded value varies the pattern so fallback covers
+// in the same category still look distinct.
 //
 // The category's colour/name come from the live categories API. Callers that
 // already have them can pass `categoryColor`/`categoryName` to avoid the lookup.
@@ -18,18 +22,22 @@ export function BlogCover({
   slug,
   categorySlug,
   title,
+  featuredImage,
   className = "",
   rounded = true,
   categoryColor,
   categoryName,
+  priority = false,
 }: {
   slug: string;
   categorySlug: string;
   title?: string;
+  featuredImage?: string;
   className?: string;
   rounded?: boolean;
   categoryColor?: string;
   categoryName?: string;
+  priority?: boolean;
 }) {
   // Categories arrive from the server-rendered site-data context, so however
   // many covers a page renders they cost zero network requests.
@@ -48,6 +56,24 @@ export function BlogCover({
   const c2 = `hsl(${hue} 60% 8%)`;
   const accent = `hsl(${hue} ${sStr} ${lStr})`;
   const accentSoft = `hsl(${hue} 70% 60% / 0.18)`;
+  const imageSrc = safeUrl(featuredImage);
+
+  // Prefer the image uploaded through the CMS. Older posts without an image
+  // keep the deterministic SVG cover, so no existing blog post breaks.
+  if (imageSrc) {
+    return (
+      <div className={`${className} ${rounded ? "rounded-xl" : ""} relative overflow-hidden`} aria-hidden="true">
+        <SafeImage
+          src={imageSrc}
+          alt=""
+          fill
+          sizes="(max-width: 768px) 100vw, 640px"
+          priority={priority}
+          className="object-cover"
+        />
+      </div>
+    );
+  }
 
   // A few decorative "blobs" placed deterministically.
   const blobs = [0, 1, 2].map((i) => {
@@ -61,7 +87,7 @@ export function BlogCover({
   });
 
   return (
-    <div className={`${className} ${rounded ? "rounded-xl" : ""} overflow-hidden`} aria-hidden="true">
+    <div className={`${className} ${rounded ? "rounded-xl" : ""} relative overflow-hidden`} aria-hidden="true">
       <svg viewBox="0 0 640 320" className="h-full w-full" preserveAspectRatio="xMidYMid slice" role="img">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">

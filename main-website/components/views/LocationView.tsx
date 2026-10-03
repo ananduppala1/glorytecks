@@ -1,8 +1,16 @@
 "use client";
 
-import { motion } from "framer-motion";
+// Still a Client Component, but no longer because of an animation library.
+// It reads contact details from the SiteDataProvider React context via
+// useContactInfo(). Framer Motion is gone (see components/ui/reveal.tsx), so
+// the JS this now ships is its own logic rather than 62 KB of animation
+// runtime. To finish the conversion, the page would pass the derived contact
+// info down as a prop instead of reading context — tracked in
+// docs/PERFORMANCE_AUDIT.md.
+
+import { motion } from '@/components/ui/reveal';
 import Link from "next/link";
-import { MapPin, Phone, Clock, Train, ArrowRight, CheckCircle2, Star } from "lucide-react";
+import { MapPin, Phone, Clock, Train, ArrowRight, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useContactInfo } from "@/components/site/SiteDataProvider";
 import { QueryState } from "@/components/common/states";
@@ -14,16 +22,6 @@ const LocationView = ({ courses }: { courses: Course[] }) => {
   const { phoneHref, whatsappHref, phone, email, address } = useContactInfo();
 
 
-  const keywords = [
-    "Best Data Science Training in Hyderabad",
-    "Python Course near Ameerpet",
-    "Generative AI Course Hyderabad",
-    "Power BI Training Ameerpet",
-    "Data Analytics Course Hyderabad",
-    "IT Training Institute near Metro",
-    "MLOps Course Hyderabad",
-    "Data Engineering Training",
-  ];
 
   return (
     <>
@@ -39,7 +37,7 @@ const LocationView = ({ courses }: { courses: Course[] }) => {
               <MapPin className="h-3 w-3" /> Ameerpet, Hyderabad
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Best IT Training Institute in <span className="gradient-text">Hyderabad</span>
+              IT Training in <span className="gradient-text">Ameerpet, Hyderabad</span>
             </h1>
             <p className="text-lg text-muted-foreground mb-6">
               GloryTecks at Ameerpet, Hyderabad — the city&rsquo;s top-rated training center for Data Science,
@@ -134,55 +132,40 @@ const LocationView = ({ courses }: { courses: Course[] }) => {
         </div>
       </section>
 
-      {/* SEO keyword section */}
-      <section className="container-px mx-auto max-w-7xl py-16">
-        <motion.div {...reveal}>
-          <h2 className="text-2xl font-bold mb-6">Why GloryTecks is Hyderabad&rsquo;s Top IT Institute</h2>
-          <div className="grid sm:grid-cols-2 gap-4 mb-8">
-            {keywords.map((kw, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
-                <span>{kw}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-muted-foreground text-sm leading-relaxed max-w-3xl">
-            GloryTecks is Hyderabad&rsquo;s most trusted IT training institute, located in the heart of Ameerpet —
-            the city&rsquo;s tech training hub. We offer hands-on training in Data Science, Generative AI, Python,
-            Power BI, MLOps, Data Analytics, and Data Engineering. Our industry expert trainers, small batch
-            sizes (max 15 students), and dedicated placement cell ensure every student gets personalized
-            attention and job-ready skills. With 500+ hiring partners across Hyderabad, Bengaluru, Chennai,
-            and Pune, GloryTecks graduates are placed across India&rsquo;s top companies.
+      {/*
+        Was two "SEO" sections: a checkmarked list of eight keyword phrases
+        ("Best Data Science Training in Hyderabad", "Python Course near
+        Ameerpet", …) and a paragraph listing every locality name in the city.
+        Neither told a visitor anything — they were keyword lists formatted to
+        look like content. Replaced with what someone actually wants from the
+        centre page: how to get here, what runs on site, and which courses are
+        taught in the classroom.
+      */}
+      <section className="container-px mx-auto max-w-4xl py-16 border-t border-border">
+        <motion.div {...reveal} className="space-y-4">
+          <h2 className="text-2xl font-bold">Training at the Ameerpet centre</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            The centre is a short walk from Ameerpet Metro Station, on the Red and Blue lines,
+            which puts it within a direct ride of most of Hyderabad. Classroom batches run
+            alongside live online sessions, so you can switch format week to week if your
+            schedule changes.
+          </p>
+          <p className="text-muted-foreground leading-relaxed">
+            Weekday and weekend batches are both available. Classroom sessions include
+            in-person doubt-clearing, and every course is taught by practitioners working in
+            the field. See{" "}
+            <Link href="/placements" className="text-primary hover:underline">
+              placement support
+            </Link>{" "}
+            for how we help with the job search, or{" "}
+            <Link href="/contact" className="text-primary hover:underline">
+              get in touch
+            </Link>{" "}
+            for current batch dates and fees.
           </p>
         </motion.div>
       </section>
 
-      {/* NEAR HYDERABAD / LOCAL SEO SECTION */}
-      <section className="container-px mx-auto max-w-4xl py-10 border-t border-border">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          viewport={{ once: true }}
-          className="text-muted-foreground text-sm space-y-3"
-        >
-          <h2 className="text-lg font-bold text-foreground">Training Institute Near Hyderabad — Serving Ameerpet, Kukatpally &amp; Nearby Areas</h2>
-          <p>
-            GloryTecks is conveniently located near Ameerpet Metro Station, making it easily accessible from across
-            Hyderabad. Students from Kukatpally, KPHB, Miyapur, Madhapur, Begumpet, Banjara Hills, Dilsukhnagar,
-            LB Nagar, Uppal, and all parts of Hyderabad regularly attend our courses. We are the top-rated training
-            institute near Ameerpet for Data Science, AI, Python, Power BI, MLOps, Data Engineering, Data Analytics,
-            and SQL Server training.
-          </p>
-          <p>
-            Looking for the best coaching center near Hyderabad with placement support? GloryTecks offers offline
-            classroom training, live online training, and hybrid batches to serve students from Hyderabad, Secunderabad,
-            and nearby areas. Our{" "}
-            <Link href="/placements" className="text-primary hover:underline">placement record</Link> speaks for itself —
-            3000+ students placed, 95% placement rate, packages up to 22 LPA.
-          </p>
-        </motion.div>
-      </section>
     </>
   );
 };

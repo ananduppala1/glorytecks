@@ -10,6 +10,7 @@ import {
   requestWithMeta,
   PUBLIC_API_BASE_URL,
   REVALIDATE,
+  CACHE_TAGS,
   type PaginationMeta,
   type QueryParams,
 } from "./client";
@@ -114,6 +115,7 @@ function mapCategory(raw: Raw): CategoryKnowledge {
     salary: raw.salary ?? { fresher: "", mid: "", senior: "" },
     blurb: raw.blurb ?? "",
     order: raw.order,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -151,6 +153,7 @@ function mapCourse(raw: Raw): Course {
     featured: raw.featured,
     order: raw.order,
     seo: raw.seo,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -253,6 +256,7 @@ function mapComparison(raw: Raw): Comparison {
     relatedCourses: raw.relatedCourses ?? [],
     faqs,
     order: raw.order,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -265,6 +269,7 @@ function mapLocality(raw: Raw): Locality {
     context: raw.context ?? "",
     nearby: raw.nearby ?? "",
     order: raw.order,
+    updatedAt: raw.updatedAt,
   };
 }
 
@@ -354,7 +359,7 @@ export async function fetchBlogs(
 ): Promise<{ items: BlogPost[]; meta?: PaginationMeta }> {
   const { data, meta } = await requestWithMeta<Raw[]>("/public/blogs", {
     params,
-    revalidate: REVALIDATE.CONTENT,
+    tags: [CACHE_TAGS.blogs], revalidate: REVALIDATE.CONTENT,
   });
   return { items: (data ?? []).map(mapBlog), meta };
 }
@@ -375,6 +380,33 @@ export async function fetchBlogContext(slug: string): Promise<BlogContext> {
   };
 }
 
+/** Minimal per-post record the sitemaps need — slug plus real content dates. */
+export interface BlogSitemapItem {
+  slug: string;
+  date?: string;
+  updated?: string;
+  categorySlug?: string;
+}
+
+/**
+ * One request for the whole archive's sitemap data.
+ *
+ * Replaces walking `/public/blogs` 25 pages at a time. The backend answers
+ * this from a single indexed query projecting four columns, so both sitemaps
+ * together now cost 1 upstream request instead of ~50 per hour.
+ */
+export async function fetchBlogSitemapFeed(): Promise<BlogSitemapItem[]> {
+  const data = await request<Raw[]>("/public/blogs/sitemap", { tags: [CACHE_TAGS.blogs], revalidate: REVALIDATE.CONTENT });
+  return (data ?? [])
+    .filter((r) => typeof r?.slug === "string" && r.slug)
+    .map((r) => ({
+      slug: r.slug,
+      date: r.date,
+      updated: r.updated,
+      categorySlug: r.categorySlug,
+    }));
+}
+
 export async function fetchBlog(slug: string): Promise<BlogPost> {
   const data = await request<Raw>(`/public/blogs/${encodeURIComponent(slug)}`, {
     params: { full: 1 },
@@ -385,7 +417,7 @@ export async function fetchBlog(slug: string): Promise<BlogPost> {
 
 // ── Courses ──────────────────────────────────────────────────────────────────
 export async function fetchCourses(): Promise<Course[]> {
-  const data = await request<Raw[]>("/public/courses", { revalidate: REVALIDATE.CONTENT });
+  const data = await request<Raw[]>("/public/courses", { tags: [CACHE_TAGS.courses], revalidate: REVALIDATE.CONTENT });
   return (data ?? []).map(mapCourse);
 }
 
@@ -396,47 +428,47 @@ export async function fetchCourse(slug: string): Promise<Course> {
 
 // ── Simple collections ───────────────────────────────────────────────────────
 export async function fetchCategories(): Promise<CategoryKnowledge[]> {
-  const data = await request<Raw[]>("/public/categories", { revalidate: REVALIDATE.CONTENT });
+  const data = await request<Raw[]>("/public/categories", { tags: [CACHE_TAGS.categories], revalidate: REVALIDATE.CONTENT });
   return (data ?? []).map(mapCategory);
 }
 
 export async function fetchAuthors(): Promise<Author[]> {
-  const data = await request<Raw[]>("/public/authors", { revalidate: REVALIDATE.CONTENT });
+  const data = await request<Raw[]>("/public/authors", { tags: [CACHE_TAGS.people], revalidate: REVALIDATE.CONTENT });
   return (data ?? []).map(mapStandaloneAuthor);
 }
 
 export async function fetchTrainers(): Promise<Trainer[]> {
-  const data = await request<Raw[]>("/public/trainers", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/trainers", { tags: [CACHE_TAGS.people], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapTrainer);
 }
 
 export async function fetchTestimonials(): Promise<Testimonial[]> {
-  const data = await request<Raw[]>("/public/testimonials", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/testimonials", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapTestimonial);
 }
 
 export async function fetchPlacements(): Promise<Placement[]> {
-  const data = await request<Raw[]>("/public/placements", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/placements", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapPlacement);
 }
 
 export async function fetchCompanies(): Promise<Company[]> {
-  const data = await request<Raw[]>("/public/companies", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/companies", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapCompany);
 }
 
 export async function fetchRoadmaps(): Promise<Roadmap[]> {
-  const data = await request<Raw[]>("/public/roadmaps", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/roadmaps", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapRoadmap);
 }
 
 export async function fetchFaqs(): Promise<Faq[]> {
-  const data = await request<Raw[]>("/public/faqs", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/faqs", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapFaq);
 }
 
 export async function fetchComparisons(): Promise<Comparison[]> {
-  const data = await request<Raw[]>("/public/comparisons", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/comparisons", { tags: [CACHE_TAGS.comparisons], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapComparison);
 }
 
@@ -446,7 +478,7 @@ export async function fetchComparison(slug: string): Promise<Comparison> {
 }
 
 export async function fetchLocalities(): Promise<Locality[]> {
-  const data = await request<Raw[]>("/public/localities", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/localities", { tags: [CACHE_TAGS.localities], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapLocality);
 }
 
@@ -456,17 +488,17 @@ export async function fetchLocality(slug: string): Promise<Locality> {
 }
 
 export async function fetchGallery(): Promise<GalleryItem[]> {
-  const data = await request<Raw[]>("/public/gallery", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/gallery", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapGallery);
 }
 
 export async function fetchBatches(): Promise<Batch[]> {
-  const data = await request<Raw[]>("/public/batches", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/batches", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapBatch);
 }
 
 export async function fetchLegalDocs(): Promise<LegalDoc[]> {
-  const data = await request<Raw[]>("/public/legal", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw[]>("/public/legal", { tags: [CACHE_TAGS.marketing], revalidate: REVALIDATE.FAST });
   return (data ?? []).map(mapLegal);
 }
 
@@ -476,7 +508,7 @@ export async function fetchLegalDoc(slug: string): Promise<LegalDoc> {
 }
 
 export async function fetchSettings(): Promise<SiteSettings> {
-  const data = await request<Raw>("/public/settings", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw>("/public/settings", { tags: [CACHE_TAGS.settings], revalidate: REVALIDATE.FAST });
   return mapSettings(data);
 }
 
@@ -524,7 +556,7 @@ function mapAbout(raw: Raw): AboutContent {
 }
 
 export async function fetchAbout(): Promise<AboutContent> {
-  const data = await request<Raw>("/public/about", { revalidate: REVALIDATE.FAST });
+  const data = await request<Raw>("/public/about", { tags: [CACHE_TAGS.about], revalidate: REVALIDATE.FAST });
   return mapAbout(data);
 }
 

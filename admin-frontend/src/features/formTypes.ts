@@ -32,6 +32,7 @@ export interface FieldDef {
   required?: boolean;
   placeholder?: string;
   hint?: string;
+  readOnlyOnEdit?: boolean;
   /** 1 = half width, 2 = full width (on sm+). */
   colSpan?: 1 | 2;
   options?: { label: string; value: string }[];
@@ -68,6 +69,18 @@ export interface ResourceConfig<T extends { id: string } = { id: string }> {
   defaultOrder?: 'asc' | 'desc';
   columns: Column<T>[];
   fields: FieldDef[];
+    /**
+   * Converts a backend record into the values displayed by the form.
+   */
+  prepareEdit?: (record: T) => Record<string, unknown>;
+
+  /**
+   * Converts form values into the payload expected by the backend.
+   */
+  prepareSubmit?: (
+    values: Record<string, unknown>,
+    mode: 'create' | 'edit',
+  ) => Record<string, unknown>;
   /** Width of the edit dialog. */
   dialogWide?: boolean;
 }

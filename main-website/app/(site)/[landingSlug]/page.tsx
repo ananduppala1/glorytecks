@@ -3,14 +3,34 @@ import { notFound } from 'next/navigation';
 import LocationCourseView from '@/components/views/LocationCourseView';
 import Breadcrumbs from '@/components/site/Breadcrumbs';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { buildMetadata, breadcrumbSchema, SITE_URL } from '@/lib/seo';
+import { buildMetadata, notFoundMetadata, breadcrumbSchema, SITE_URL } from '@/lib/seo';
+import { SCHEMA_ID, ref } from '@/lib/schema';
 import { findLanding, locationLandings } from '@/config/locationLandings';
 import { safe } from '@/lib/site-data';
 import * as api from '@/lib/api/services';
-import { ApiError } from '@/lib/api/client';
 import type { Course, Locality } from '@/types/content';
 
 type Params = Promise<{ landingSlug: string }>;
+
+/**
+ * ISR window for the landing pages, matching the CONTENT tier the course and
+ * locality reads use. Declared explicitly so that a page which rendered as a
+ * 404 because the backend was unreachable during the build re-renders on the
+ * next revalidation instead of staying a 404 until the next deploy.
+ */
+export const revalidate = 300;
+
+/**
+ * The landing set is a route table in this repository, not CMS content, so it
+ * is finite and fully known at build time. Closing the route means every
+ * single-segment URL that is not a landing — every bot probe for
+ * /wp-login.php, /.env, /xmlrpc.php — is a static 404 served without
+ * invoking a serverless function.
+ *
+ * This is the last route to match a single-segment path, so it is also the
+ * catch-all for the whole site.
+ */
+export const dynamicParams = false;
 
 /**
  * Programmatic local-SEO landing pages, e.g. `/data-science-course-ameerpet`.
@@ -24,30 +44,22 @@ type Params = Promise<{ landingSlug: string }>;
  * every landing renders on demand instead — a transient backend blip during a
  * deploy degrades to slower first requests, it does not fail the build.
  */
-export async function generateStaticParams() {
-  const [courses, localities] = await Promise.all([
-    safe(() => api.fetchCourses(), [], 'landing:staticParams:courses'),
-    safe(() => api.fetchLocalities(), [], 'landing:staticParams:localities'),
-  ]);
-
-  if (!courses.length || !localities.length) return [];
-
-  const courseSlugs = new Set(courses.map((c) => c.slug));
-  const localitySlugs = new Set(localities.map((l) => l.slug));
-
-  return locationLandings
-    .filter((l) => courseSlugs.has(l.courseSlug) && localitySlugs.has(l.localitySlug))
-    .map((l) => ({ landingSlug: l.slug }));
+export function generateStaticParams() {
+  return locationLandings.map((l) => ({ landingSlug: l.slug }));
 }
 
-async function getCourse(slug: string): Promise<Course | null> {
-  try {
-    return await api.fetchCourse(slug);
-  } catch (err) {
-    if (err instanceof ApiError && err.isNotFound) return null;
-    throw err;
-  }
-}
+/**
+ * A landing is only a real page while its course AND locality both exist in
+ * the CMS, so a missing one still 404s at render time — the route being
+ * closed decides which URLs exist, not which ones have content.
+ *
+ * Failures of any kind (404, network, backend down) collapse to `null` rather
+ * than throwing, matching how the locality read already degrades through
+ * `safe()`. A backend outage during a build therefore produces a 404 that
+ * heals on the next revalidation, instead of failing the build outright.
+ */
+const getCourse = (slug: string): Promise<Course | null> =>
+  safe(() => api.fetchCourse(slug), null, `landing:course:${slug}`);
 
 /**
  * The FAQ copy. Built once here and passed to both the visible <details> list
@@ -82,11 +94,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const landing = findLanding(landingSlug);
 
   if (!landing) {
-    return buildMetadata({
-      title: '404 — Page Not Found | GloryTecks Hyderabad',
-      description: 'Page not found.',
-      noindex: true,
-    });
+    return notFoundMetadata('404 — Page Not Found | GloryTecks Hyderabad', 'Page not found.');
   }
 
   const [course, localities] = await Promise.all([
@@ -95,20 +103,18 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   ]);
   const loc = localities.find((l) => l.slug === landing.localitySlug);
 
+  // No canonical on a 404 — see the note in /courses/[slug].
   if (!course || !loc) {
-    return buildMetadata({
-      title: 'Course in Hyderabad | GloryTecks',
-      description: 'GloryTecks course in Hyderabad.',
-      canonical: '/courses',
-      noindex: true,
-    });
+    return notFoundMetadata(
+      'Course in Hyderabad | GloryTecks',
+      'This course is not currently offered at this location.',
+    );
   }
 
   return buildMetadata({
-    title: `${course.title} Course in ${loc.name}, Hyderabad | GloryTecks — ${course.duration}`,
+    title: `${course.title} Course in ${loc.name}, Hyderabad | GloryTecks`,
     description: describe(course, loc),
     canonical: `/${landing.slug}`,
-    keywords: `${course.title.toLowerCase()} course ${loc.name.toLowerCase()}, ${course.title.toLowerCase()} training ${loc.name.toLowerCase()}, ${course.title.toLowerCase()} course hyderabad`,
   });
 }
 
@@ -155,24 +161,23 @@ export default async function LocationCoursePage({ params }: { params: Params })
     inLanguage: 'en-IN',
     teaches: course.modules,
     about: { '@type': 'Thing', name: course.title },
-    provider: {
-      '@type': 'EducationalOrganization',
-      '@id': `${SITE_URL}/#organization`,
-      name: 'GloryTecks',
-      url: SITE_URL,
-      areaServed: { '@type': 'Place', name: `${loc.name}, Hyderabad` },
-    },
+    // Provider and the physical venue are referenced by @id, not re-described.
+    // The onsite instance points at the real Ameerpet centre rather than
+    // implying a campus in this locality — GloryTecks has one location, and
+    // asserting otherwise in structured data would be a false local claim.
+    provider: ref(SCHEMA_ID.organization),
     hasCourseInstance: [
       {
         '@type': 'CourseInstance',
         courseMode: 'onsite',
-        location: {
-          '@type': 'Place',
-          name: `GloryTecks, Ameerpet, Hyderabad (serving ${loc.name})`,
-        },
-        courseWorkload: course.duration,
+        location: ref(SCHEMA_ID.localBusiness),
+        ...(course.duration ? { courseWorkload: course.duration } : {}),
       },
-      { '@type': 'CourseInstance', courseMode: 'online', courseWorkload: course.duration },
+      {
+        '@type': 'CourseInstance',
+        courseMode: 'online',
+        ...(course.duration ? { courseWorkload: course.duration } : {}),
+      },
     ],
   };
 

@@ -118,7 +118,11 @@ export function ResourcePage<T extends { id: string }>({ config }: ResourcePageP
 
   const handleCreate = async (values: Record<string, unknown>) => {
     try {
-      await createMut.mutateAsync(values as Partial<T>);
+      const payload = config.prepareSubmit
+        ? config.prepareSubmit(values, 'create')
+        : values;
+
+      await createMut.mutateAsync(payload as Partial<T>);
       toast.success(`${config.singular} created`);
       setCreating(false);
     } catch (err) {
@@ -128,8 +132,16 @@ export function ResourcePage<T extends { id: string }>({ config }: ResourcePageP
 
   const handleUpdate = async (values: Record<string, unknown>) => {
     if (!editing) return;
+
     try {
-      await updateMut.mutateAsync({ id: editing.id, payload: values as Partial<T> });
+      const payload = config.prepareSubmit
+        ? config.prepareSubmit(values, 'edit')
+        : values;
+
+      await updateMut.mutateAsync({
+        id: editing.id,
+        payload: payload as Partial<T>,
+      });
       toast.success(`${config.singular} updated`);
       setEditing(null);
     } catch (err) {
@@ -195,6 +207,7 @@ export function ResourcePage<T extends { id: string }>({ config }: ResourcePageP
               submitting={createMut.isPending}
               submitLabel={`Create ${config.singular.toLowerCase()}`}
               onCancel={() => setCreating(false)}
+              mode="create"
             />
           </div>
         </DialogContent>
@@ -211,11 +224,19 @@ export function ResourcePage<T extends { id: string }>({ config }: ResourcePageP
             {editing && (
               <ResourceForm
                 fields={config.fields}
-                defaultValues={pickEditable(editing as Record<string, unknown>, config.fields)}
+                defaultValues={
+                  config.prepareEdit
+                    ? config.prepareEdit(editing)
+                    : pickEditable(
+                        editing as Record<string, unknown>,
+                        config.fields,
+                      )
+                }
                 onSubmit={handleUpdate}
                 submitting={updateMut.isPending}
-                submitLabel="Save changes"
                 onCancel={() => setEditing(null)}
+                submitLabel="Save changes"
+                mode="edit"
               />
             )}
           </div>

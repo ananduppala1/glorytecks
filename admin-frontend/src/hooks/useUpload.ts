@@ -134,9 +134,9 @@ export function useUpload() {
         form.append('file', file);
         if (folder) form.append('folder', folder);
         const endpoint = kind === 'image' ? '/uploads/image' : '/uploads/document';
-        const res = await api.post<{ data: UploadResult }>(endpoint, form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        // Do not set Content-Type manually. With FormData, Axios/the browser
+        // must generate the multipart boundary for the server to parse the body.
+        const res = await api.post<{ data: UploadResult }>(endpoint, form);
         return res.data.data.url;
       } catch (err) {
         toast.error(uploadErrorMessage(err));

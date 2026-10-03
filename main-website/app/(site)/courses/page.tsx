@@ -1,36 +1,33 @@
 import type { Metadata } from "next";
 import CoursesView from "@/components/views/CoursesView";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema, SITE_URL } from "@/lib/seo";
+import { staticPageMetadata, breadcrumbSchema, staticRoute } from "@/lib/seo";
+import { courseListSchema, webPageSchema } from "@/lib/schema";
 import { safe } from "@/lib/site-data";
 import * as api from "@/lib/api/services";
 
-export const metadata: Metadata = buildMetadata({
-  title: "All IT Courses in Hyderabad | GloryTecks — Data Science, AI, Python, Power BI, MLOps",
-  description:
-    "Browse all IT training courses at GloryTecks Hyderabad. Data Science, Generative AI, Agentic AI, MLOps, Python, Power BI, Data Analytics, Data Engineering & SQL Server — all with 100% placement support. Best software courses near Ameerpet & Kukatpally.",
-  canonical: "/courses",
-  keywords:
-    "IT courses Hyderabad, data science course Hyderabad, generative AI course Hyderabad, agentic AI course Hyderabad, MLOps course Hyderabad, python course Hyderabad, power BI course Hyderabad, data engineering course Hyderabad, data analytics course Hyderabad, SQL server course Hyderabad, machine learning course Hyderabad, software courses Hyderabad, best IT courses Ameerpet, job oriented courses Hyderabad",
-});
+// Title, description, canonical and indexability all come from the
+// route registry in lib/seo/routes.ts, which is also what the sitemap and the
+// indexability matrix read — so the three cannot drift apart.
+export const metadata: Metadata = staticPageMetadata("/courses");
 
-const collectionSchema = {
-  "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  "@id": `${SITE_URL}/courses#webpage`,
-  url: `${SITE_URL}/courses`,
-  name: "All IT Training Courses in Hyderabad | GloryTecks",
-  description:
-    "Complete catalog of IT training courses at GloryTecks Hyderabad including Data Science, AI, Python, Power BI, MLOps, and more.",
-  isPartOf: { "@id": `${SITE_URL}/#website` },
-};
+const route = staticRoute("/courses");
+
 
 export default async function CoursesPage() {
   const courses = await safe(() => api.fetchCourses(), [], "courses:list");
 
   return (
     <>
-      <JsonLd schema={[collectionSchema, breadcrumbSchema([{ name: "Courses", url: "/courses" }])]} />
+      <JsonLd schema={[webPageSchema({
+          path: route.path,
+          name: route.title,
+          description: route.description,
+          type: "CollectionPage",
+        }), breadcrumbSchema([{ name: "Courses", url: "/courses" }]),
+        // The list the page renders (all courses, before any client-side
+        // filter), for the course list rich result. Omitted if the API failed.
+        ...(courses.length ? [courseListSchema(courses)] : [])]} />
       <CoursesView courses={courses} />
     </>
   );

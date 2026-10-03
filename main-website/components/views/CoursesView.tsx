@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from '@/components/ui/reveal';
 
 import {
   ArrowRight,

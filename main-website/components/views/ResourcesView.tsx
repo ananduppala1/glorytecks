@@ -1,8 +1,6 @@
-"use client";
-
 import Link from "next/link";
 
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/site/PageHeader";

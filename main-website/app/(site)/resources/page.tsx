@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
 import ResourcesView from "@/components/views/ResourcesView";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema } from "@/lib/seo";
+import { staticPageMetadata, breadcrumbSchema } from "@/lib/seo";
 
-export const metadata: Metadata = buildMetadata({
-  title: "Free IT Resources & Study Material | GloryTecks Hyderabad | Data Science, AI, Python Guides",
-  description:
-    "Access free IT learning resources, study materials, course brochures, guides and tutorials from GloryTecks Hyderabad. Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, Data Engineering and SQL Server study material — all free to download.",
-  canonical: "/resources",
-  keywords:
-    "free IT resources Hyderabad, data science study material, AI learning resources, python tutorial free, power BI guide, MLOps resources, GloryTecks free material, IT course brochure Hyderabad",
-});
+// Title, description, canonical and indexability all come from the
+// route registry in lib/seo/routes.ts, which is also what the sitemap and the
+// indexability matrix read — so the three cannot drift apart.
+export const metadata: Metadata = staticPageMetadata("/resources");
 
 export default function ResourcesPage() {
   return (

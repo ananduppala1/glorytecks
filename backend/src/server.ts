@@ -87,7 +87,14 @@ process.on('uncaughtException', (err) => {
 
 // On Vercel the VERCEL env var is always set. Skip bootstrap (listen)
 // and just export the Express app for the serverless runtime.
-if (!process.env.VERCEL) {
+// if (!process.env.VERCEL) {
+//   void bootstrap();
+// }
+if(process.env.VERCEL) {
+  logger.info('VERCEL detected - initializing Redis');
+  void connectRedis();
+} else {
+  logger.info('Non-Vercel environment - using bootstrap');
   void bootstrap();
 }
 

@@ -64,6 +64,9 @@ const securityHeaders = [
   { key: 'Content-Security-Policy', value: csp },
 ];
 
+/** Vercel's deployment and alias hosts — never the canonical copy of the site. */
+export const VERCEL_APP_HOST = '.*\\.vercel\\.app';
+
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -81,13 +84,81 @@ const nextConfig = {
         source: '/brochures/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=2592000, immutable' }],
       },
+      // Keep every *.vercel.app host out of the index, whatever
+      // NEXT_PUBLIC_SITE_URL says. robots.ts already disallows a build whose
+      // origin is not production, but the production deployment's own alias
+      // (e.g. glorytecks-psi.vercel.app) is built WITH the production origin,
+      // so it would otherwise be a public, crawlable mirror of the site held
+      // back only by its canonicals.
+      //
+      // Next compiles a host condition to `^value$` against the lower-cased
+      // hostname, so this cannot match glorytecks.com or www.glorytecks.com.
+      // lib/seo/crawl.test.ts pins that.
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: VERCEL_APP_HOST }],
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex' }],
+      },
     ];
   },
 
-  // Carried over from vercel.json — an already-indexed legacy URL.
+  // See docs/SEO_REDIRECT_MAP.md for the evidence behind every entry.
+  // `permanent: true` emits HTTP 308, which preserves SEO equity exactly as a
+  // 301 does while also preserving the request method.
   async redirects() {
     return [
+      // Legacy URL from the pre-React static site, carried over from vercel.json.
       { source: '/data-science-course', destination: '/courses/data-science', permanent: true },
+
+      // The four sitemap URLs the React app published and that are already
+      // submitted to Search Console (docs/MIGRATION.md §6). The sitemap
+      // architecture moved to one index with per-type children, so these are
+      // redirected to their exact new equivalent rather than 404'd.
+      { source: '/sitemap-index.xml', destination: '/sitemap.xml', permanent: true },
+      { source: '/blog-sitemap.xml', destination: '/sitemaps/blog.xml', permanent: true },
+      { source: '/category-sitemap.xml', destination: '/sitemaps/categories.xml', permanent: true },
+      // No image sitemap replaces this one: the covers it listed are inline
+      // SVGs rendered by BlogCover and were never on the pages. The blog
+      // sitemap is the closest surviving equivalent — same URL set, no
+      // phantom images.
+      { source: '/image-sitemap.xml', destination: '/sitemaps/blog.xml', permanent: true },
+
+      // ── Merged blog articles ────────────────────────────────────────────
+      // Five interview articles were cross-posted into two categories each,
+      // with identical titles AND identical excerpts. The copy in the topic
+      // category is kept; the duplicate redirects to it.
+      //
+      // This list is mirrored by MERGED_ARTICLES in lib/blog/merged.ts, which
+      // is what keeps these URLs out of the sitemap and is the source the
+      // content docs describe. `lib/blog/merged.test.ts` reads THIS FILE and
+      // fails if the two ever disagree.
+      //
+      // See docs/BLOG_CONTENT_ACTION_PLAN.md §2.2.
+      {
+        source: '/blog/aws-interview-questions-for-data-engineers-2',
+        destination: '/blog/aws-interview-questions-for-data-engineers',
+        permanent: true,
+      },
+      {
+        source: '/blog/data-engineering-interview-questions-and-answers-2',
+        destination: '/blog/data-engineering-interview-questions-and-answers',
+        permanent: true,
+      },
+      {
+        source: '/blog/data-analyst-interview-questions-and-answers-2',
+        destination: '/blog/data-analyst-interview-questions-and-answers',
+        permanent: true,
+      },
+      {
+        source: '/blog/gcp-interview-questions-for-data-engineers-2',
+        destination: '/blog/gcp-interview-questions-for-data-engineers',
+        permanent: true,
+      },
+      {
+        source: '/blog/mlops-interview-questions-and-answers-2',
+        destination: '/blog/mlops-interview-questions-and-answers',
+        permanent: true,
+      },
     ];
   },
 };

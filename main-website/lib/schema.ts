@@ -1,19 +1,59 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Site-wide structured data.
+// Site-wide structured data — one coherent @id-linked graph.
 //
-// These four documents were hardcoded inline in the React app's index.html.
-// They are unchanged in content — only the `@id`/`url` values are now derived
-// from NEXT_PUBLIC_SITE_URL so staging deployments don't emit production URLs.
+// Previously three independent top-level nodes (EducationalOrganization,
+// LocalBusiness, WebSite) each restated the business's name, address, phone and
+// description, and a fourth LocalBusiness lived on the training-in-hyderabad
+// page. Four nodes describing one business, none of them referencing the
+// others, is how a knowledge graph ends up with duplicate entities.
+//
+// Now there is ONE organization node (`#organization`), ONE place node
+// (`#localbusiness`) that declares itself a branch of it, and ONE website node
+// (`#website`) published by it. Page-level nodes (WebPage, Course, BlogPosting,
+// BreadcrumbList) reference those by @id instead of re-describing them.
+//
+// Every factual property is traceable to config/business.ts or to visible page
+// content. Properties that were previously asserted without evidence —
+// foundingDate, numberOfEmployees, aggregateRating — are gone; see the notes
+// below each.
 // ─────────────────────────────────────────────────────────────────────────────
+import {
+  BUSINESS,
+  openingHoursSchema,
+  postalAddressSchema,
+  sameAsProfiles,
+} from '@/config/business';
 import { SITE_URL } from './seo';
 
+/** Stable @id values. Every node in the graph points at these, never at copies. */
+export const SCHEMA_ID = {
+  organization: `${SITE_URL}/#organization`,
+  localBusiness: `${SITE_URL}/#localbusiness`,
+  website: `${SITE_URL}/#website`,
+} as const;
+
+/** Reference an existing node rather than repeating it. */
+export const ref = (id: string) => ({ '@id': id });
+
+/**
+ * The organization. An IT training institute is an EducationalOrganization —
+ * the specific subtype carries more meaning than a bare Organization.
+ *
+ * Deliberately absent:
+ *   • `foundingDate` — was '2020'. Nothing in the repository, the CMS seed or
+ *     any visible page states a founding year.
+ *   • `numberOfEmployees` — was 20. Same: unsupported.
+ *   • `aggregateRating` — see the note on `localBusinessSchema`.
+ *   • `legalName` — omitted while config/business.ts has none confirmed.
+ */
 export function organizationSchema() {
   return {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
-    '@id': `${SITE_URL}/#organization`,
-    name: 'GloryTecks',
-    alternateName: ['Glory Tecks', 'Glory Technologies Training Institute', 'Glorytecks Hyderabad'],
+    '@id': SCHEMA_ID.organization,
+    name: BUSINESS.name,
+    ...(BUSINESS.legalName ? { legalName: BUSINESS.legalName } : {}),
+    alternateName: BUSINESS.alternateNames,
     url: SITE_URL,
     logo: {
       '@type': 'ImageObject',
@@ -21,117 +61,83 @@ export function organizationSchema() {
       width: 256,
       height: 244,
     },
+    image: `${SITE_URL}/og-image.jpg`,
+    description:
+      'GloryTecks is an IT training institute in Ameerpet, Hyderabad, offering classroom and live online courses in Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, Data Analytics, Data Engineering and SQL Server, with placement support.',
+    // Topical expertise. These map to courses that actually exist in the CMS.
     knowsAbout: [
       'Data Science',
-      'Artificial Intelligence',
-      'Machine Learning',
       'Generative AI',
+      'Agentic AI',
+      'Machine Learning',
       'Python Programming',
       'Power BI',
+      'Data Analytics',
       'Data Engineering',
       'MLOps',
-      'SQL',
-      'Data Analytics',
+      'SQL Server',
     ],
+    address: postalAddressSchema(),
+    telephone: BUSINESS.telephone,
+    email: BUSINESS.email,
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+919908099980',
-      contactType: 'customer service',
+      telephone: BUSINESS.telephone,
+      contactType: 'admissions',
       areaServed: 'IN',
       availableLanguage: ['English', 'Hindi', 'Telugu'],
     },
-    image: `${SITE_URL}/og-image.jpg`,
-    description:
-      "GloryTecks is Hyderabad's leading IT training institute offering Data Science, Generative AI, Agentic AI, Machine Learning, Python, Power BI, MLOps, Data Analytics, Data Engineering, and SQL Server courses with 100% placement support at Ameerpet and Kukatpally.",
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: '603, Annapurna Block, Aditya Enclave',
-      addressLocality: 'Ameerpet, Hyderabad',
-      addressRegion: 'Telangana',
-      postalCode: '500038',
-      addressCountry: 'IN',
-    },
-    telephone: '+919908099980',
-    email: 'gloryteckss@gmail.com',
-    foundingDate: '2020',
-    numberOfEmployees: { '@type': 'QuantitativeValue', value: '20' },
     areaServed: [
       { '@type': 'City', name: 'Hyderabad' },
       { '@type': 'City', name: 'Secunderabad' },
-      { '@type': 'Place', name: 'Ameerpet' },
-      { '@type': 'Place', name: 'Kukatpally' },
       { '@type': 'State', name: 'Telangana' },
     ],
-    hasOfferCatalog: {
-      '@type': 'OfferCatalog',
-      name: 'IT Training Courses',
-      itemListElement: [
-        'Data Science Course Hyderabad',
-        'Generative AI Course Hyderabad',
-        'Agentic AI Course Hyderabad',
-        'Python Programming Course Hyderabad',
-        'Power BI Course Hyderabad',
-        'MLOps Course Hyderabad',
-        'Data Engineering Course Hyderabad',
-        'Data Analytics Course Hyderabad',
-        'SQL Server Course Hyderabad',
-      ].map((name) => ({
-        '@type': 'Offer',
-        itemOffered: { '@type': 'Course', name },
-      })),
-    },
-    sameAs: [
-      'https://www.facebook.com/profile.php?id=61589860342695',
-      'https://www.instagram.com/glorytecks/',
-      'https://www.linkedin.com/company/glorytecks/',
-      'https://www.youtube.com/@glorytecks',
-    ],
+    sameAs: sameAsProfiles(),
   };
 }
 
+/**
+ * The physical training centre, as a Place-type node distinct from the
+ * organization and explicitly linked to it via `parentOrganization`.
+ *
+ * Deliberately absent: `aggregateRating`. The previous graph asserted
+ * 4.9 from 500 reviews on the training-in-hyderabad page. That is
+ * self-serving review markup — a rating about the business, supplied by the
+ * business, on its own site — which Google's structured-data policy does not
+ * allow and which risks a manual action. Genuine reviews still render as
+ * visible testimonials from the CMS; they are simply not re-asserted as
+ * machine-readable ratings.
+ */
 export function localBusinessSchema() {
   return {
     '@context': 'https://schema.org',
-    '@type': ['LocalBusiness', 'EducationalOrganization'],
-    '@id': `${SITE_URL}/#localbusiness`,
-    name: 'GloryTecks IT Training Institute',
+    '@type': 'LocalBusiness',
+    '@id': SCHEMA_ID.localBusiness,
+    name: `${BUSINESS.name} — Ameerpet Centre`,
+    parentOrganization: ref(SCHEMA_ID.organization),
+    url: `${SITE_URL}/training-in-hyderabad`,
     description:
-      'Best IT training institute in Hyderabad offering Data Science, AI, Python, Power BI, MLOps, Data Engineering courses with 100% placement support near Ameerpet Metro Station.',
-    url: SITE_URL,
-    telephone: '+919908099980',
-    email: 'gloryteckss@gmail.com',
-    priceRange: '₹₹',
-    currenciesAccepted: 'INR',
-    paymentAccepted: 'Cash, Credit Card, Debit Card, UPI, Net Banking, EMI',
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: '603, Annapurna Block, Aditya Enclave',
-      addressLocality: 'Ameerpet',
-      addressRegion: 'Telangana',
-      postalCode: '500038',
-      addressCountry: 'IN',
+      'The GloryTecks training centre in Ameerpet, Hyderabad — classroom batches, weekend sessions and in-person doubt-clearing, a short walk from Ameerpet Metro Station.',
+    address: postalAddressSchema(),
+    geo: {
+      '@type': 'GeoCoordinates',
+      latitude: BUSINESS.geo.latitude,
+      longitude: BUSINESS.geo.longitude,
     },
-    geo: { '@type': 'GeoCoordinates', latitude: 17.4375, longitude: 78.4463 },
-    openingHoursSpecification: [
-      {
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-        opens: '08:00',
-        closes: '21:00',
-      },
-      {
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: 'Sunday',
-        opens: '09:00',
-        closes: '17:00',
-      },
-    ],
-    hasMap: 'https://www.google.com/maps?q=GloryTecks+Ameerpet+Hyderabad',
+    telephone: BUSINESS.telephone,
+    email: BUSINESS.email,
+    openingHoursSpecification: openingHoursSchema(),
+    hasMap: BUSINESS.mapUrl,
     image: `${SITE_URL}/og-image.jpg`,
-    sameAs: [
-      'https://www.facebook.com/profile.php?id=61589860342695',
-      'https://www.instagram.com/glorytecks/',
-      'https://www.linkedin.com/company/glorytecks/',
+    // A price range with no prices anywhere on the site would be unsupported,
+    // so it is omitted rather than guessed.
+    areaServed: [
+      { '@type': 'Place', name: 'Ameerpet' },
+      { '@type': 'Place', name: 'Kukatpally' },
+      { '@type': 'Place', name: 'Madhapur' },
+      { '@type': 'Place', name: 'Gachibowli' },
+      { '@type': 'Place', name: 'HITEC City' },
+      { '@type': 'Place', name: 'Dilsukhnagar' },
     ],
   };
 }
@@ -140,18 +146,22 @@ export function websiteSchema() {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    '@id': `${SITE_URL}/#website`,
-    name: 'GloryTecks',
+    '@id': SCHEMA_ID.website,
+    name: BUSINESS.name,
     url: SITE_URL,
     description:
-      'Best IT training institute in Hyderabad for Data Science, AI, Python, Power BI, MLOps, Data Engineering courses',
-    publisher: { '@id': `${SITE_URL}/#organization` },
+      'IT training courses in Data Science, AI, Python, Power BI, MLOps and Data Engineering from GloryTecks, Hyderabad.',
+    publisher: ref(SCHEMA_ID.organization),
     inLanguage: 'en-IN',
+    // Points at the site's only real server-side search. `/courses` was the
+    // previous target, but that page never reads `?q=` — course filtering
+    // is client-side (docs/MIGRATION.md §9) — so the template described a
+    // search that silently ignored the term.
     potentialAction: {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: `${SITE_URL}/courses?q={search_term_string}`,
+        urlTemplate: `${SITE_URL}/blog?q={search_term_string}`,
       },
       'query-input': 'required name=search_term_string',
     },
@@ -159,50 +169,123 @@ export function websiteSchema() {
 }
 
 /**
- * The homepage FAQPage schema. It pairs with the visible <details> FAQ block at
- * the bottom of the homepage — the answers below are the same copy, which is
- * what keeps the markup eligible for rich results rather than misleading.
+ * A WebPage node for a specific page, wired into the graph.
+ *
+ * Replaces the hand-written WebPage/CollectionPage/AboutPage/ContactPage
+ * objects that each page declared separately, none of which referenced the
+ * website or organization node.
  */
-export function homeFaqSchema() {
-  const faqs: [string, string][] = [
-    [
-      'What is GloryTecks and where is it located?',
-      "GloryTecks is Hyderabad's leading IT training institute located at 603, Annapurna Block, Aditya Enclave, Ameerpet, Hyderabad - 500038. We offer Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, Data Engineering, Data Analytics, and SQL Server training courses with 100% placement support.",
-    ],
-    [
-      'Which are the best courses offered at GloryTecks Hyderabad?',
-      'GloryTecks offers the best Data Science course, Generative AI course, Agentic AI course, Python programming course, Power BI course, MLOps course, Data Engineering course, Data Analytics course, Machine Learning course, and SQL Server course in Hyderabad with placement assistance.',
-    ],
-    [
-      'Does GloryTecks provide 100% placement assistance?',
-      'Yes, GloryTecks provides 100% placement assistance with 500+ hiring partners. Our placement support includes dedicated career counselors, resume building, ATS-friendly CV preparation, LinkedIn optimization, mock interview sessions, and exclusive campus placement drives.',
-    ],
-    [
-      'Does GloryTecks offer online training in Hyderabad?',
-      'Yes, GloryTecks offers both online and offline (classroom) training. We have live online classes via Zoom/Google Meet, recorded lecture access, and in-person training at our Ameerpet center. Weekend and weekday batches are available for working professionals and students.',
-    ],
-    [
-      'What is the fee structure at GloryTecks?',
-      'GloryTecks offers flexible fee structures with EMI starting from ₹1,999/month. Scholarships are available for deserving students. Course fees vary by program — contact us at +91 9908099980 or visit our Ameerpet center for the latest fee structure and available discounts.',
-    ],
-    [
-      'Is GloryTecks the best Data Science training institute in Hyderabad?',
-      'GloryTecks is consistently rated among the best Data Science training institutes in Hyderabad with a 4.9/5 rating from 500+ students. Our Data Science program covers Python, Machine Learning, Deep Learning, NLP, Generative AI, and real-world projects with 100% placement support.',
-    ],
-    [
-      'Who can join GloryTecks courses — freshers or experienced professionals?',
-      'GloryTecks courses are open to everyone — freshers, graduates, BTech/degree students, and working professionals looking to upskill. We design specialized batches for beginners, career switchers, and experienced professionals wanting to transition into AI, Data Science, or Analytics roles.',
-    ],
-    [
-      'Does GloryTecks offer certification courses in Hyderabad?',
-      'Yes, GloryTecks issues industry-recognized completion certificates and helps students earn certifications from AWS, Google, Microsoft, and other global platforms. Our certification courses in Data Science, AI, Python, Power BI, and MLOps are highly valued by Hyderabad employers.',
-    ],
-  ];
+export function webPageSchema({
+  path,
+  name,
+  description,
+  type = 'WebPage',
+  primaryImage,
+  mainEntity,
+}: {
+  path: string;
+  name: string;
+  description: string;
+  type?: 'WebPage' | 'AboutPage' | 'ContactPage' | 'CollectionPage';
+  primaryImage?: string;
+  /** `@id` of the thing the page is about, such as a course page's Course node. */
+  mainEntity?: string;
+}) {
+  const url = path === '/' ? SITE_URL : `${SITE_URL}${path}`;
+  return {
+    '@context': 'https://schema.org',
+    '@type': type,
+    '@id': `${url}#webpage`,
+    url,
+    name,
+    description,
+    isPartOf: ref(SCHEMA_ID.website),
+    about: ref(SCHEMA_ID.organization),
+    inLanguage: 'en-IN',
+    ...(primaryImage ? { primaryImageOfPage: primaryImage } : {}),
+    ...(mainEntity ? { mainEntity: ref(mainEntity) } : {}),
+  };
+}
 
+/**
+ * The /courses summary page's ItemList.
+ *
+ * Google's course list rich result pairs Course markup on each detail page
+ * with an ItemList on a summary page that points at them
+ * (developers.google.com/search/docs/appearance/structured-data/course).
+ * The detail pages already carry Course markup; without this list, no course
+ * was eligible. It names exactly the courses the page renders, in the same
+ * order, each by its canonical URL, and asserts nothing else about them.
+ */
+export function courseListSchema(courses: readonly { slug: string }[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    '@id': `${SITE_URL}/courses#courses`,
+    numberOfItems: courses.length,
+    itemListElement: courses.map((c, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${SITE_URL}/courses/${c.slug}`,
+    })),
+  };
+}
+
+/**
+ * The homepage FAQ block's schema.
+ *
+ * It pairs with the visible <details> list at the bottom of the homepage — the
+ * answers here are the same copy, which is what keeps the markup honest rather
+ * than misleading. `components/views/HomeView.tsx` renders `HOME_FAQS` from
+ * this module, so the two cannot drift.
+ *
+ * Every answer was reviewed for unsupported claims. Removed in this pass:
+ * a "4.9/5 rating from 500+ students" claim (no verifiable source, and a
+ * rating assertion the business cannot self-certify), "consistently rated
+ * among the best" (unverifiable superlative), and a specific EMI figure
+ * (₹1,999/month) that appears nowhere else on the site or in the CMS.
+ */
+export const HOME_FAQS: readonly [string, string][] = [
+  [
+    'What is GloryTecks and where is it located?',
+    `GloryTecks is an IT training institute in Ameerpet, Hyderabad. The centre is at ${BUSINESS.address.streetAddress}, ${BUSINESS.address.locality} – ${BUSINESS.address.postalCode}, a short walk from Ameerpet Metro Station. Courses cover Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, Data Engineering, Data Analytics and SQL Server.`,
+  ],
+  [
+    'Which courses does GloryTecks offer?',
+    'GloryTecks runs courses in Data Science, Generative AI, Agentic AI, Python Programming, Power BI, MLOps, Data Engineering, Data Analytics and SQL Server. Each programme is project-based and taught by working practitioners.',
+  ],
+  [
+    'What placement support does GloryTecks provide?',
+    'Placement support includes dedicated career counselling, resume and ATS-friendly CV preparation, LinkedIn profile review, mock interview sessions and introductions to hiring partners. Support is provided to every enrolled learner; it is assistance with the job search, not a guarantee of employment.',
+  ],
+  [
+    'Does GloryTecks offer online training?',
+    'Yes. GloryTecks runs both live online classes and in-person classroom training at the Ameerpet centre, with recorded session access. Weekday and weekend batches are available for students and working professionals.',
+  ],
+  [
+    'What does a GloryTecks course cost?',
+    `Course fees vary by programme and by batch, and instalment options are available. Call ${BUSINESS.telephone.replace('+91', '+91 ')} or visit the Ameerpet centre for the current fee structure.`,
+  ],
+  [
+    'What does the Data Science course cover?',
+    'The Data Science programme covers Python, statistics, machine learning, deep learning, NLP and Generative AI, built around real-world projects. Full module-by-module details are on the Data Science course page.',
+  ],
+  [
+    'Who are GloryTecks courses designed for?',
+    'Courses are open to freshers, graduates, BTech and degree students, and working professionals upskilling or moving into AI, Data Science or Analytics roles. Batches are structured so beginners and career switchers can start from fundamentals.',
+  ],
+  [
+    'Does GloryTecks provide a certificate?',
+    'Yes. GloryTecks issues a course completion certificate, and the curriculum is aligned to the syllabi of external certifications from providers such as AWS, Google and Microsoft, which learners sit with those providers directly.',
+  ],
+];
+
+export function homeFaqSchema() {
   return {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: faqs.map(([name, text]) => ({
+    '@id': `${SITE_URL}/#faq`,
+    mainEntity: HOME_FAQS.map(([name, text]) => ({
       '@type': 'Question',
       name,
       acceptedAnswer: { '@type': 'Answer', text },
@@ -216,8 +299,6 @@ export function homeBreadcrumbSchema() {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     '@id': `${SITE_URL}/#breadcrumb`,
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-    ],
+    itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL }],
   };
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import EntitiesView from "@/components/views/EntitiesView";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema } from "@/lib/seo";
+import { staticPageMetadata, breadcrumbSchema } from "@/lib/seo";
 
 /**
  * The React page had no useSEO() call, so it inherited index.html's homepage
@@ -9,12 +9,10 @@ import { buildMetadata, breadcrumbSchema } from "@/lib/seo";
  * whole site. Giving it its own metadata is the minimum correct behaviour;
  * the copy is taken from the page's existing visible content, not invented.
  */
-export const metadata: Metadata = buildMetadata({
-  title: "Our Entities | GloryTecks — Academy, Labs, Careers, Enterprise & Foundation",
-  description:
-    "The GloryTecks family of brands: GloryTecks Academy, Labs, Careers, Enterprise, Foundation and Global — building the future of technology education and careers from Hyderabad.",
-  canonical: "/entities",
-});
+// Title, description, canonical and indexability all come from the
+// route registry in lib/seo/routes.ts, which is also what the sitemap and the
+// indexability matrix read — so the three cannot drift apart.
+export const metadata: Metadata = staticPageMetadata("/entities");
 
 export default function EntitiesPage() {
   return (

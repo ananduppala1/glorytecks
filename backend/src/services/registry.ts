@@ -185,7 +185,22 @@ export const resources: ResourceDef<any>[] = [
       uniqueField: 'slug',
       defaultSort: { title: 1 },
     }),
-    controller: { label: 'Legal document', allowedFilters: ['status'] },
+    controller: {
+      label: 'Legal document',
+      allowedFilters: ['status'],
+
+      transformBody: (body, req) => {
+        const out = { ...body };
+
+        // Slug may be supplied when creating a document,
+        // but it must never be changed after creation.
+        if (req.method !== 'POST') {
+          delete out.slug;
+        }
+
+        return out;
+      },
+    },
     publicRead: true,
   },
   {

@@ -72,6 +72,7 @@ const calloutStyles = {
 export function BlogContent({ blocks }: { blocks: Block[] }) {
   return (
     <div className="blog-content space-y-6 leading-relaxed text-muted-foreground">
+    {console.log(blocks)}
       {blocks.map((block, i) => {
         switch (block.type) {
           case "heading":
@@ -221,13 +222,19 @@ export function BlogContent({ blocks }: { blocks: Block[] }) {
             if (!imageSrc) return null;
             return (
               <figure key={i} className="my-2">
-                <div className="overflow-hidden rounded-xl border border-border bg-card/40">
+                {/*
+                  The CMS image block carries no dimensions, so width/height
+                  cannot be set without inventing them. A fixed aspect ratio on
+                  the wrapper reserves the space instead, which is what stops
+                  the article text below from jumping as each image loads.
+                */}
+                <div className="aspect-[16/9] max-h-[420px] overflow-hidden rounded-xl border border-border bg-card/40">
                   <img
                     src={imageSrc}
                     alt={block.alt ?? ""}
                     loading="lazy"
                     decoding="async"
-                    className="mx-auto h-auto max-h-[420px] w-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
                 {block.caption && (

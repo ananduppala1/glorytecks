@@ -1,8 +1,26 @@
 {
+  // `module` and `moduleResolution` were "CommonJS" / "node". The latter is an
+  // alias for "node10", which TypeScript 6 reports as deprecated and TypeScript
+  // 7 removes:
+  //
+  //   Option 'moduleResolution=node10' is deprecated and will stop functioning
+  //   in TypeScript 7.0.
+  //
+  // "node16" is the modern replacement for a Node.js program (as opposed to
+  // "bundler", which both frontends use because Vite/Next resolve for them).
+  // It reads `"type"` and `exports` maps from package.json the way Node
+  // actually does, instead of the legacy pre-ESM algorithm.
+  //
+  // This is NOT a switch to ESM. package.json declares `"type": "commonjs"`,
+  // so node16 resolves and EMITS CommonJS — verified: dist/server.js still
+  // uses require()/exports and contains no ESM statements, and `npm start`
+  // (`node dist/server.js`) is unchanged. Suppressing the warning with
+  // `"ignoreDeprecations": "6.0"` would have deferred the same work to the
+  // TypeScript 7 upgrade.
   "compilerOptions": {
     "target": "ES2021",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "node16",
+    "moduleResolution": "node16",
     "lib": ["ES2021"],
     "outDir": "./dist",
     "rootDir": "./src",

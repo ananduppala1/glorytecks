@@ -113,6 +113,15 @@ export interface CategoryKnowledge {
   salary: SalaryBand;
   blurb: string;
   order?: number;
+  /**
+   * Row-level `updated_at` from the CMS database, ISO-8601.
+   *
+   * Exposed by every `/public/*` collection endpoint (the backend's row→API
+   * mapper emits `createdAt`/`updatedAt` for every table that has them) and
+   * used as the real `<lastmod>` for this item in the sitemap. Optional
+   * because a projected list response may omit it.
+   */
+  updatedAt?: string;
 }
 
 // ── Course ───────────────────────────────────────────────────────────────────
@@ -153,6 +162,15 @@ export interface Course {
   featured?: boolean;
   order?: number;
   seo?: Seo;
+  /**
+   * Row-level `updated_at` from the CMS database, ISO-8601.
+   *
+   * Exposed by every `/public/*` collection endpoint (the backend's row→API
+   * mapper emits `createdAt`/`updatedAt` for every table that has them) and
+   * used as the real `<lastmod>` for this item in the sitemap. Optional
+   * because a projected list response may omit it.
+   */
+  updatedAt?: string;
 }
 
 // ── Trainer ──────────────────────────────────────────────────────────────────
@@ -249,6 +267,15 @@ export interface Comparison {
   /** Tuple form `[question, answer]` used by the comparison pages. */
   faqs: [string, string][];
   order?: number;
+  /**
+   * Row-level `updated_at` from the CMS database, ISO-8601.
+   *
+   * Exposed by every `/public/*` collection endpoint (the backend's row→API
+   * mapper emits `createdAt`/`updatedAt` for every table that has them) and
+   * used as the real `<lastmod>` for this item in the sitemap. Optional
+   * because a projected list response may omit it.
+   */
+  updatedAt?: string;
 }
 
 // ── Locality ─────────────────────────────────────────────────────────────────
@@ -260,6 +287,15 @@ export interface Locality {
   context: string;
   nearby: string;
   order?: number;
+  /**
+   * Row-level `updated_at` from the CMS database, ISO-8601.
+   *
+   * Exposed by every `/public/*` collection endpoint (the backend's row→API
+   * mapper emits `createdAt`/`updatedAt` for every table that has them) and
+   * used as the real `<lastmod>` for this item in the sitemap. Optional
+   * because a projected list response may omit it.
+   */
+  updatedAt?: string;
 }
 
 // ── Gallery ──────────────────────────────────────────────────────────────────

@@ -30,7 +30,10 @@ export const tokenStore = {
 export const api: AxiosInstance = axios.create({
   baseURL: `${API_BASE}${API_PREFIX}`,
   withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
+  // Do not set Content-Type globally. FormData uploads need the browser/Axios
+  // adapter to add the multipart boundary automatically; forcing JSON here
+  // is a common source of broken file uploads.
+  headers: { Accept: 'application/json' },
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {

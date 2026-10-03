@@ -33,16 +33,23 @@ export const PUBLIC_API_BASE_URL = normalise(
 
 /**
  * Revalidation windows, derived from the backend's own cache tiers
- * (see backend `src/routes/public.routes.ts` and `src/lib/cache.ts`):
+ * (see backend `src/routes/public.routes.ts` and `src/lib/cache.ts`).
  *
- *   FAST    — endpoints the backend marks `must-revalidate` because editors
- *             expect their saves to appear immediately (settings, about,
- *             batches, testimonials, placements, faqs, localities, trainers,
- *             companies, legal, roadmaps, comparisons, gallery).
- *   CONTENT — endpoints the backend edge-caches (blogs, courses). Redis holds
- *             them for 10–15 minutes and is purged on every admin mutation.
+ * ── Why these numbers changed ───────────────────────────────────────────────
+ * FAST used to be 60 seconds, and the root layout reads the Settings singleton
+ * on every page — so EVERY route on the site inherited a 60-second ISR window.
+ * `next build` showed `Revalidate: 1m` on all 28 routes. On Vercel that means a
+ * trafficked page can be regenerated sixty times an hour, each one a function
+ * invocation and a cache write, purely in case an editor changed the phone
+ * number.
  *
- * Both are overridable per deployment without touching code.
+ * The short window existed because there was no way to push a change. There is
+ * now: `app/api/revalidate/route.ts` accepts a tagged purge, so content can be
+ * invalidated the moment it is saved instead of being re-fetched on a timer.
+ * That makes long TTLs correct rather than risky.
+ *
+ * Both remain env-overridable, so a deployment that has not wired the webhook
+ * yet can dial them back down without a code change.
  */
 const toSeconds = (value: string | undefined, fallback: number) => {
   const n = Number(value);
@@ -50,9 +57,40 @@ const toSeconds = (value: string | undefined, fallback: number) => {
 };
 
 export const REVALIDATE = {
-  FAST: toSeconds(process.env.REVALIDATE_FAST, 60),
-  CONTENT: toSeconds(process.env.REVALIDATE_CONTENT, 300),
+  /**
+   * Site chrome and editor-facing singletons: settings, about, batches,
+   * testimonials, localities, trainers, companies, comparisons.
+   *
+   * 10 minutes rather than 1 — a 10x reduction in regeneration work that is
+   * still well inside "I changed the banner, why is it not live" tolerance
+   * even with no webhook. With the webhook wired, raise this freely.
+   */
+  FAST: toSeconds(process.env.REVALIDATE_FAST, 600),
+
+  /**
+   * High-volume content: blogs, courses, categories. An hour, because these
+   * are purged on publish through the tag below.
+   */
+  CONTENT: toSeconds(process.env.REVALIDATE_CONTENT, 3600),
 } as const;
+
+/**
+ * Cache tags, so a publish can purge exactly what changed instead of waiting
+ * out a TTL. Kept as a closed set: a typo'd tag silently never invalidates.
+ */
+export const CACHE_TAGS = {
+  settings: 'settings',
+  courses: 'courses',
+  blogs: 'blogs',
+  categories: 'categories',
+  comparisons: 'comparisons',
+  localities: 'localities',
+  about: 'about',
+  people: 'people',
+  marketing: 'marketing',
+} as const;
+
+export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
 
 /** Shape of the backend's uniform success envelope. */
 interface ApiEnvelope<T> {

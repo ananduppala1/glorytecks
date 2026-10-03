@@ -120,10 +120,57 @@ export async function cacheWrap<T>(
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 
 /**
+ * Stable, order-independent serialisation of an arbitrary value.
+ *
+ * Object keys are sorted at EVERY level so `{a:1,b:2}` and `{b:2,a:1}` produce
+ * the same string. Arrays keep their order, because order is meaningful in a
+ * sort spec.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
+}
+
+/**
  * Build a deterministic hash from an object (e.g. query params) to use as
  * a cache key segment. Produces a short, URL-safe string.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * BUG FIX — this function previously collided every filtered query onto one key.
+ *
+ * It was:
+ *     JSON.stringify(params, Object.keys(params).sort())
+ *
+ * When `JSON.stringify` is given an ARRAY as its second argument, that array is
+ * a property allow-list, and it is applied at EVERY level of nesting — not just
+ * the top. `params` looks like:
+ *
+ *     { page, limit, sort, search, filters: { categorySlug, kind, status, … } }
+ *
+ * `Object.keys(params)` is the top-level names only, so none of the keys inside
+ * `filters` survived the allow-list and `filters` serialised as `{}`. Every
+ * public blog list query with the same page/limit/sort/search therefore hashed
+ * to an identical cache key:
+ *
+ *     ?categorySlug=python  ─┐
+ *     ?categorySlug=aws     ─┼─→  public:blogs:list:e9c5ec9ea405
+ *     ?kind=salary          ─┘
+ *
+ * Observed live: /public/blogs?categorySlug=aws returned 50 PYTHON articles,
+ * because a python request had populated the key first. Every blog category
+ * archive served whatever was cached first, under its own title, H1 and
+ * canonical — twelve pages of identical content claiming twelve topics.
+ *
+ * Sorting keys recursively instead keeps the intended behaviour (key order must
+ * not change the hash) without the allow-list semantics.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 export function hashQuery(params: Record<string, unknown>): string {
-  const sorted = JSON.stringify(params, Object.keys(params).sort());
-  return crypto.createHash('md5').update(sorted).digest('hex').slice(0, 12);
+  return crypto.createHash('md5').update(stableStringify(params)).digest('hex').slice(0, 16);
 }

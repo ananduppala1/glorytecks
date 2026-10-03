@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { blogPath } from "@/lib/blog/merged";
 import { safeUrl } from "@/lib/safeUrl";
 import type { LucideIcon } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from '@/components/ui/reveal';
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight, Award, Briefcase, CheckCircle2, GraduationCap,
@@ -19,6 +20,7 @@ import { homepageVideoEmbedUrl } from "@/lib/youtube";
 import { SafeImage } from "@/components/SafeImage";
 import heroImg from "@/assets/hero.webp";
 import DemoModal from "@/components/site/DemoModal";
+import { HOME_FAQS } from '@/lib/schema';
 import type {
   Batch, BlogPost, Company, Course, Faq, Roadmap, SiteSettings, Testimonial, Trainer,
 } from "@/types/content";
@@ -185,7 +187,12 @@ const HomeView = ({
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight">
               {settings?.heroSection?.headingLine1 ?? "Launch Your"}{" "}
               <span className="gradient-text">{settings?.heroSection?.headingHighlight ?? "Tech Career"}</span>{" "}
-              {settings?.heroSection?.headingLine2 ?? "with Hyderabad's Best Training"}
+              {/* Fallback only — the live H1 comes from the CMS hero settings.
+                  Was "with Hyderabad's Best Training"; an unsubstantiated
+                  superlative in the page's single H1 is the worst place for
+                  one. The CMS value overrides this, so the admin copy still
+                  needs its own review. */}
+              {settings?.heroSection?.headingLine2 ?? 'with Training in Hyderabad'}
             </h1>
 
             <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
@@ -676,7 +683,7 @@ const HomeView = ({
           <div className="grid md:grid-cols-3 gap-5">
             {latestBlogs.map((post, i) => (
               <motion.div key={post.slug} {...stagger(i)}>
-                <Link href={`/blog/${post.slug}`} className="group rounded-2xl bg-card border border-border p-5 shadow-[var(--shadow-card)] card-hover block h-full">
+                <Link href={blogPath(post.slug)} className="group rounded-2xl bg-card border border-border p-5 shadow-[var(--shadow-card)] card-hover block h-full">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full">{post.category}</span>
                     <span className="text-xs text-muted-foreground">{post.readTime} read</span>
@@ -766,23 +773,22 @@ const HomeView = ({
       </section>
 
       {/* ══════════════════════════════════════════
-          VISIBLE FAQ SECTION (matches FAQPage schema in index.html)
+          VISIBLE FAQ SECTION
+
+          Rendered from HOME_FAQS in lib/schema.ts — the same array the
+          FAQPage JSON-LD is built from. Before this the two were maintained
+          separately and had already diverged: the schema asserted questions
+          that were not on the page (including a "4.9/5 rating" claim) and the
+          page showed questions that were not in the schema. FAQ markup that
+          does not match visible content is a rich-results violation, so there
+          is now exactly one list.
       ══════════════════════════════════════════ */}
       <section className="container-px mx-auto max-w-4xl py-16 border-t border-border">
         <h2 className="text-2xl md:text-3xl font-bold mb-6 text-foreground">
-          Frequently Asked Questions — GloryTecks Hyderabad
+          Frequently asked questions
         </h2>
         <div className="space-y-3">
-          {[
-            ["What is GloryTecks and where is it located?", "GloryTecks is an IT training institute located at 603, Annapurna Block, Aditya Enclave, Ameerpet, Hyderabad - 500038. We offer Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, Data Engineering, Data Analytics and SQL Server training with placement support."],
-            ["Which courses does GloryTecks offer in Hyderabad?", "GloryTecks offers Data Science, Generative AI, Agentic AI, Python programming, Power BI, MLOps, Data Engineering, Data Analytics, Machine Learning and SQL Server courses in Hyderabad, in both online and classroom formats."],
-            ["Does GloryTecks provide placement assistance?", "Yes. GloryTecks provides 100% placement assistance including dedicated career counsellors, ATS-friendly resume building, LinkedIn optimization, mock interviews and referrals to hiring partners across Hyderabad."],
-            ["Does GloryTecks offer online training?", "Yes. GloryTecks offers live online classes, recorded session access and in-person classroom training at the Ameerpet centre, with weekend and weekday batches for students and working professionals."],
-            ["What is the fee structure at GloryTecks?", "GloryTecks offers flexible fees with EMI options. Course fees vary by program — call +91 99080 99980 or visit the Ameerpet centre for the latest fee structure, scholarships and discounts."],
-            ["Are GloryTecks courses suitable for freshers and working professionals?", "Yes. Courses are open to freshers, graduates, BTech and degree students, and working professionals. Specialized batches are designed for beginners, career switchers and experienced professionals."],
-            ["Does GloryTecks offer certification courses?", "Yes. GloryTecks issues course-completion certificates and helps students prepare for global certifications from AWS, Google and Microsoft in Data Science, AI, Python, Power BI and MLOps."],
-            ["How do I book a free demo at GloryTecks?", "Call or WhatsApp +91 99080 99980, or use the contact form on the website to book a free demo class for any GloryTecks course in Hyderabad."],
-          ].map(([q, a], i) => (
+          {HOME_FAQS.map(([q, a], i) => (
             <details
               key={i}
               className="rounded-xl bg-card border border-border p-4 group"

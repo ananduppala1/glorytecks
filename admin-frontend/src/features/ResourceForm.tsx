@@ -18,6 +18,7 @@ import { ObjectListInput } from '@/components/ObjectListInput';
 import { cn, slugify } from '@/lib/utils';
 import type { FieldDef } from '@/features/formTypes';
 
+
 interface ResourceFormProps<T extends Record<string, unknown>> {
   fields: FieldDef[];
   defaultValues: DefaultValues<T>;
@@ -25,6 +26,7 @@ interface ResourceFormProps<T extends Record<string, unknown>> {
   submitting?: boolean;
   submitLabel?: string;
   onCancel?: () => void;
+  mode?: 'create' | 'edit';
 }
 
 
@@ -55,6 +57,7 @@ export function ResourceForm<T extends Record<string, unknown>>({
   submitting,
   submitLabel = 'Save',
   onCancel,
+  mode = 'create',
 }: ResourceFormProps<T>) {
   const {
     control,
@@ -185,37 +188,49 @@ export function ResourceForm<T extends Record<string, unknown>>({
         );
 
       case 'tags':
-        return (
-          <Controller
-            control={control}
-            name={name}
-            render={({ field }) => (
-              <TagInput
-                value={(field.value as string[]) ?? []}
-                onChange={field.onChange}
-                placeholder={f.placeholder}
-              />
-            )}
-          />
-        );
+              return (
+                <Controller
+                  control={control}
+                  name={name}
+                  render={({ field }) => (
+                    <TagInput
+                      value={(field.value as string[]) ?? []}
+                      onChange={field.onChange}
+                      placeholder={f.placeholder}
+                    />
+                  )}
+                />
+              );
 
-      case 'slug':
+            case 'slug': {
+        const readOnly =
+          f.readOnlyOnEdit === true && mode === 'edit';
+
         return (
           <div className="flex gap-2">
             <Input
               id={f.name}
               placeholder={f.placeholder ?? 'auto-generated'}
               className="font-mono text-[0.8125rem]"
+              readOnly={readOnly}
               {...register(name)}
             />
-            {f.slugFrom && (
+
+            {f.slugFrom && !readOnly && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   const src = watch(f.slugFrom as never) as unknown as string;
-                  if (src) setValue(name, slugify(src) as never, { shouldDirty: true });
+
+                  if (src) {
+                    setValue(
+                      name,
+                      slugify(src) as never,
+                      { shouldDirty: true },
+                    );
+                  }
                 }}
               >
                 Generate
@@ -223,6 +238,7 @@ export function ResourceForm<T extends Record<string, unknown>>({
             )}
           </div>
         );
+      }
 
       case 'color':
         return (

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { blogPath } from "@/lib/blog/merged";
 import { safeUrl } from "@/lib/safeUrl";
 import { Facebook, Instagram, Linkedin, Twitter, Youtube, Mail, Phone, MapPin, ArrowRight } from "lucide-react";
 import Logo from "./Logo";
@@ -119,7 +120,7 @@ const Footer = () => {
           <ul className="space-y-2 text-xs text-muted-foreground">
             {latestBlogs.map(p => (
               <li key={p.slug}>
-                <Link href={`/blog/${p.slug}`} className="hover:text-primary transition-colors line-clamp-2 leading-snug">{p.title}</Link>
+                <Link href={blogPath(p.slug)} className="hover:text-primary transition-colors line-clamp-2 leading-snug">{p.title}</Link>
               </li>
             ))}
           </ul>
@@ -187,13 +188,30 @@ const Footer = () => {
       <div className="border-t border-border">
         <div className="container-px mx-auto max-w-7xl py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} GloryTecks IT Training Institute Hyderabad. All rights reserved.</p>
-          <div className="flex flex-wrap gap-4">
-            <Link href="/contact" className="hover:text-primary">Privacy Policy</Link>
-            <Link href="/contact" className="hover:text-primary">Terms of Service</Link>
-            <Link href="/training-in-hyderabad" className="hover:text-primary">IT Training Hyderabad</Link>
-            <Link href="/courses/data-science" className="hover:text-primary">Data Science Hyderabad</Link>
-            <Link href="/courses/gen-ai" className="hover:text-primary">Gen AI Hyderabad</Link>
-            <Link href="/placements" className="hover:text-primary">Placements</Link>
+          <div className="flex flex-wrap justify-center sm:justify-end gap-x-5 gap-y-2">
+            <Link href="/privacy-policy" className="hover:text-primary transition-colors">
+              Privacy Policy
+            </Link>
+
+            <Link href="/terms" className="hover:text-primary transition-colors">
+              Terms of Service
+            </Link>
+
+            <Link href="/refund-policy" className="hover:text-primary transition-colors">
+              Refund Policy
+            </Link>
+
+            <Link href="/cookie-policy" className="hover:text-primary transition-colors">
+              Cookie Policy
+            </Link>
+
+            <Link href="/disclaimer" className="hover:text-primary transition-colors">
+              Disclaimer
+            </Link>
+
+            <Link href="/editorial-policy" className="hover:text-primary transition-colors">
+              Editorial Policy
+            </Link>
           </div>
         </div>
       </div>

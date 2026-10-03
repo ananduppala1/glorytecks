@@ -144,6 +144,16 @@ No Supabase key of any kind appears in this project.
 
 ## 6. SEO migration
 
+> **Superseded in part.** This section records the React → Next.js migration as
+> it happened and is left unedited as history. The sitemap architecture, robots
+> rules, canonical handling and blog query-parameter policy described below were
+> later replaced by a dedicated technical-SEO refactor. For current behaviour see
+> `SEO_PHASE_1_AUDIT.md` (what was wrong and why),
+> `SEO_INDEXABILITY_MATRIX.md` (what every URL does now) and
+> `SEO_REDIRECT_MAP.md` (including the 308s that keep the five sitemap URLs
+> below working).
+
+
 | React | Next.js |
 | --- | --- |
 | `useSEO()` mutating `<head>` post-hydration | `generateMetadata` / `export const metadata` |

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ResourceDetailView } from "@/components/views/ResourcesView";
 import { RESOURCE_SLUGS, isResourceSlug, getResource } from "@/config/resources";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema } from "@/lib/seo";
+import { buildMetadata, notFoundMetadata, breadcrumbSchema } from "@/lib/seo";
 
 type Params = Promise<{ slug: string }>;
 
@@ -12,15 +12,20 @@ export function generateStaticParams() {
   return RESOURCE_SLUGS.map((slug) => ({ slug }));
 }
 
+/**
+ * The set above is the complete set: it comes from config/resources.ts, not
+ * from a CMS, so a sixth resource cannot appear without a deploy. Closing the
+ * route means an unknown slug is a static 404 served without invoking a
+ * serverless function or touching the backend.
+ */
+export const dynamicParams = false;
+
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
+  // Unreachable while dynamicParams is false, but kept correct rather than
+  // deleted: no canonical on a 404.
   if (!isResourceSlug(slug)) {
-    return buildMetadata({
-      title: "Resource Not Found | GloryTecks",
-      description: "This resource does not exist.",
-      canonical: "/resources",
-      noindex: true,
-    });
+    return notFoundMetadata("Resource Not Found | GloryTecks", "This resource does not exist.");
   }
 
   const r = getResource(slug);

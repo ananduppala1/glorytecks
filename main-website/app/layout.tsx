@@ -20,14 +20,11 @@ import ExitIntent from '@/components/site/ExitIntent';
 import FloatingButtons from '@/components/site/FloatingButtons';
 import StickyMobileCTA from '@/components/site/StickyMobileCTA';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { REVEAL_SCRIPT } from '@/components/ui/reveal';
 import { getSiteData } from '@/lib/site-data';
 import { SITE_URL, SITE_NAME, DEFAULT_OG_IMAGE, TWITTER_HANDLE } from '@/lib/seo';
-import {
-  organizationSchema,
-  localBusinessSchema,
-  websiteSchema,
-  homeFaqSchema,
-} from '@/lib/schema';
+import { BUSINESS } from '@/config/business';
+import { organizationSchema, websiteSchema } from '@/lib/schema';
 
 const GTM_ID = 'GTM-TD5HFZ79';
 const GA_ID = 'G-MKXRJHXL9C';
@@ -39,15 +36,16 @@ const GA_ID = 'G-MKXRJHXL9C';
  */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  // Fallbacks only — every page sets its own from the route registry. The
+  // previous defaults led with "Best" and "#1" and promised "100% placement
+  // support"; a superlative the business cannot substantiate and an outcome
+  // promise are both liabilities in a site-wide default.
   title: {
-    default:
-      'GloryTecks — Best IT Training Institute in Hyderabad | Data Science, AI, Python, Power BI Courses',
+    default: 'GloryTecks — IT Training Institute in Ameerpet, Hyderabad',
     template: '%s',
   },
   description:
-    "GloryTecks is Hyderabad's #1 IT training institute at Ameerpet & Kukatpally. Enroll in Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, SQL Server & Data Engineering courses. 100% placement support, real-time projects, expert mentors. Book a free demo today!",
-  keywords:
-    'data science training Hyderabad, AI course Hyderabad, python training Hyderabad, power BI training Hyderabad, data engineering course Hyderabad, generative AI course Hyderabad, IT training institute Hyderabad, MLOps course Hyderabad',
+    'GloryTecks is an IT training institute in Ameerpet, Hyderabad, running classroom and live online courses in Data Science, Generative AI, Python, Power BI, MLOps and Data Engineering.',
   authors: [{ name: 'GloryTecks' }],
   applicationName: 'GloryTecks',
   robots: {
@@ -57,7 +55,10 @@ export const metadata: Metadata = {
     'max-snippet': -1,
     'max-video-preview': -1,
   },
-  alternates: { canonical: '/' },
+  // No site-wide default canonical. A default of '/' is inherited by any page
+  // that ships metadata without an `alternates` key, which would canonicalise
+  // that page to the homepage. Every page that should have a canonical sets
+  // its own through `buildMetadata`.
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
@@ -68,7 +69,7 @@ export const metadata: Metadata = {
         url: DEFAULT_OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: 'GloryTecks IT Training Institute Hyderabad — Data Science, AI, Python Courses',
+        alt: 'GloryTecks IT training institute, Ameerpet, Hyderabad',
       },
     ],
   },
@@ -82,26 +83,28 @@ export const metadata: Metadata = {
     icon: '/favicon.ico',
     apple: '/favicon.ico',
   },
-  // Non-standard tags the React app emitted from index.html, preserved verbatim.
+  /**
+   * Legacy <meta> tags carried over from the React app's index.html.
+   *
+   * Most of that block is gone. `revisit-after`, `target`, `HandheldFriendly`,
+   * `MobileOptimized`, `classification`, `coverage`, `category`, `language`,
+   * `subject` and `abstract` are read by no search engine in use today — they
+   * are 1990s-era directives and duplicated description text, and the
+   * `abstract` also repeated a "100% placement support" promise.
+   *
+   * `googlebot` / `bingbot` are dropped too: they restated what the generic
+   * `robots` directive above already says, and a per-agent override that
+   * disagrees with it is exactly how a page ends up accidentally indexable.
+   *
+   * What stays: the geo pair, which some local-search tooling still reads, now
+   * sourced from config/business.ts instead of a third hardcoded coordinate.
+   */
   other: {
-    googlebot: 'index, follow',
-    bingbot: 'index, follow',
-    'revisit-after': '7 days',
-    language: 'English',
-    category: 'Education, IT Training, Professional Development',
-    classification: 'Education',
-    coverage: 'Hyderabad, Telangana, India',
-    target: 'all',
-    HandheldFriendly: 'True',
-    MobileOptimized: '320',
     'geo.region': 'IN-TG',
     'geo.placename': 'Ameerpet, Hyderabad, Telangana, India',
-    'geo.position': '17.4375;78.4463',
-    ICBM: '17.4375, 78.4463',
+    'geo.position': `${BUSINESS.geo.latitude};${BUSINESS.geo.longitude}`,
+    ICBM: `${BUSINESS.geo.latitude}, ${BUSINESS.geo.longitude}`,
     'ai-content-declaration': 'human-authored',
-    subject: 'IT Training, Data Science, AI, Machine Learning courses in Hyderabad',
-    abstract:
-      'GloryTecks provides industry-aligned IT training in Data Science, Generative AI, Agentic AI, Python, Power BI, MLOps, SQL Server, and Data Engineering at Ameerpet, Hyderabad with 100% placement support.',
   },
 };
 
@@ -117,12 +120,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const siteData = await getSiteData();
 
   return (
-    <html lang="en" style={{ background: 'hsl(160 25% 5%)' }}>
+    // suppressHydrationWarning: REVEAL_SCRIPT adds `reveal-ready` to <html>
+    // before React hydrates.
+    <html lang="en" style={{ background: 'hsl(160 25% 5%)' }} suppressHydrationWarning>
       <head>
-        {/* Site-wide structured data — previously inline in index.html. */}
-        <JsonLd
-          schema={[organizationSchema(), localBusinessSchema(), websiteSchema(), homeFaqSchema()]}
-        />
+        {/* Scroll-reveal trigger — inline and first in <head> so it is running
+            before the first .reveal element is parsed. See ui/reveal.tsx. */}
+        <script dangerouslySetInnerHTML={{ __html: REVEAL_SCRIPT }} />
+{/*
+          Site-wide structured data: the organization and the website, which are
+          true on every page.
+
+          LocalBusiness and the homepage FAQPage used to be here too. Both were
+          wrong site-wide: the FAQ block is only visible on the homepage, so
+          every course, blog and comparison page was publishing FAQ markup for
+          questions a visitor could not see there; and LocalBusiness was then
+          emitted a second time by /training-in-hyderabad, putting two nodes
+          with the same @id on one page. They now render on the pages that
+          actually show them.
+        */}
+        <JsonLd schema={[organizationSchema(), websiteSchema()]} />
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
       </head>
       <body>

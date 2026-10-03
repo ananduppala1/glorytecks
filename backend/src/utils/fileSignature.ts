@@ -605,9 +605,11 @@ function isSvg(buf: Buffer): InspectResult | null {
 
 /**
  * Byte patterns a browser's content sniffer, or a misconfigured host, could
- * decide to treat as executable markup. Checked on the leading bytes of every
- * upload before format detection, so a file that is *both* a valid image and a
- * valid HTML page never gets stored.
+ * decide to treat as executable markup. Only text-like documents are inspected
+ * for markup. Binary image formats are allowed to contain arbitrary metadata
+ * bytes (including the characters '<html>' as plain text); those bytes do not
+ * turn an image into an HTML document when the asset is served with an image
+ * MIME type.
  */
 const SNIFFABLE_PREFIXES: Array<[string, RegExp]> = [
   ['HTML', /<(!doctype\s+html|html|head|body|script|iframe|object|embed|svg)[\s>/]/i],
@@ -635,10 +637,14 @@ function rejectExecutableOrMarkup(buf: Buffer, allowMarkup: boolean): string | n
   }
   if (allowMarkup) return null;
 
-  // A browser sniffs at most the first 512 bytes; check a wider window so an
-  // image with markup smuggled just past that point is still refused.
+  // Only run the markup regexes when the upload actually begins like a text
+  // document. This avoids false positives when a legitimate PNG/JPEG/WebP has
+  // HTML-looking text in metadata near the beginning of the binary container.
   const head = buf.subarray(0, 2048).toString('latin1');
   const trimmed = head.replace(/^[\s\ufeff]+/, '');
+  const looksLikeTextDocument = trimmed.startsWith('<') || trimmed.startsWith('#!');
+  if (!looksLikeTextDocument) return null;
+
   for (const [label, re] of SNIFFABLE_PREFIXES) {
     if (re.test(trimmed)) return `File contains ${label} markup`;
   }

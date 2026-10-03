@@ -2,16 +2,14 @@ import type { Metadata } from "next";
 import ComparisonIndexView from "@/components/views/ComparisonIndexView";
 import Breadcrumbs from "@/components/site/Breadcrumbs";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema, SITE_URL } from "@/lib/seo";
+import { staticPageMetadata, breadcrumbSchema, SITE_URL } from "@/lib/seo";
 import { safe } from "@/lib/site-data";
 import * as api from "@/lib/api/services";
 
-export const metadata: Metadata = buildMetadata({
-  title: "Course & Tool Comparisons | Data Science, Power BI, Python | GloryTecks Hyderabad",
-  description:
-    "Compare data and AI career paths and tools — Power BI vs Tableau, Data Science vs Data Analytics, Python vs R and more — to choose the right course in Hyderabad.",
-  canonical: "/compare",
-});
+// Title, description, canonical and indexability all come from the
+// route registry in lib/seo/routes.ts, which is also what the sitemap and the
+// indexability matrix read — so the three cannot drift apart.
+export const metadata: Metadata = staticPageMetadata("/compare");
 
 export default async function ComparisonIndexPage() {
   const comparisons = await safe(() => api.fetchComparisons(), [], "compare:list");

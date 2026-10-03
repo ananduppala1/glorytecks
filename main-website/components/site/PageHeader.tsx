@@ -1,6 +1,4 @@
-"use client";
-
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 
 const smoothReveal = {
   initial: { opacity: 0, y: 80 },

@@ -50,5 +50,5 @@ export function youtubeEmbedId(input?: string | null): string | null {
  */
 export function homepageVideoEmbedUrl(url: string | null | undefined, fallbackId: string): string {
   const id = youtubeEmbedId(url) ?? fallbackId;
-  return `https://www.youtube.com/embed/${id}?autoplay=0&mute=1&loop=1&playlist=${id}&controls=0&modestbranding=1&rel=0`;
+  return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&modestbranding=1&rel=0`;
 }

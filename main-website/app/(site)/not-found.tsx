@@ -1,5 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { notFoundMetadata } from "@/lib/seo";
+
+/**
+ * Previously this file exported no metadata at all, so a 404 body inherited the
+ * root layout's homepage title, homepage description and `index, follow`
+ * directive. The HTTP 404 status already kept it out of the index, but the head
+ * said the opposite of the status line — and a crawler that only sees the HTML
+ * would have believed the head.
+ */
+export const metadata: Metadata = notFoundMetadata(
+  "404 — Page Not Found | GloryTecks Hyderabad",
+  "The page you're looking for doesn't exist or was moved. Browse GloryTecks IT courses in Hyderabad instead.",
+);
 
 /**
  * Not-found state for routes inside the site chrome — an unknown course slug,

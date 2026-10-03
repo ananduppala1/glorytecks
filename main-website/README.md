@@ -30,6 +30,10 @@ npm run dev                    # http://localhost:3000
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint (flat config) |
 | `npm test` | Vitest unit tests |
+| `npm run test:smoke` | Live SEO parity check of a deployed origin — set `SEO_SMOKE_BASE_URL` (skipped otherwise) |
+| `npm run test:nap` | NAP consistency: the repository scan always runs; live CMS / Google Maps / site checks run with `NAP_LIVE_API`, `NAP_LIVE_GOOGLE=1`, `NAP_LIVE_SITE` |
+| `npm run test:graph` | Intent ownership + internal-link graph: offline contract always runs; the full-site crawl runs with `SEO_GRAPH_BASE_URL` (optionally `SEO_GRAPH_API`) |
+| `npm run blog:audit` | Blog content quality audit (Phase 4): unit tests always run; with `BLOG_AUDIT_BACKUP=<backup dir>` (optionally `BLOG_AUDIT_GSC=<Search Console pages CSV>`) it regenerates `docs/BLOG_REWRITE_QUEUE.csv`, `docs/BLOG_SIMILARITY_CLUSTERS.csv` and the generated sections of the quality report and remediation plan, and checks the course-cluster map (`lib/seo/topical.ts`) against the backup |
 
 ---
 
@@ -41,7 +45,7 @@ Nothing secret lives here. The site uses only public, unauthenticated endpoints.
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | Browser + server | **Yes** | Backend base URL including `/api/v1`, no trailing slash. Public by design — the contact form, demo form and brochure link are submitted from the browser. |
 | `API_BASE_URL` | Server only | No | Overrides the above for Server Components, metadata, sitemaps and robots. Use when the Next.js server can reach the backend on a private address the browser cannot. |
-| `NEXT_PUBLIC_SITE_URL` | Browser + server | Recommended | Canonical origin (default `https://glorytecks.com`). Drives canonical URLs, Open Graph URLs, JSON-LD `@id`s, robots.txt and every sitemap. **Set this on staging** so a preview never advertises production URLs. |
+| `NEXT_PUBLIC_SITE_URL` | Browser + server | Recommended | Canonical origin (default `https://glorytecks.com`). Drives canonical URLs, Open Graph URLs, JSON-LD `@id`s, robots.txt and every sitemap. Validated at import: a value that is not a bare `http(s)` origin is rejected with a build-log warning and the production origin is used instead. **Set this on staging** — any non-production origin makes `robots.txt` disallow everything, so a preview cannot compete with the live site. |
 | `NEXT_PUBLIC_IMAGE_HOSTS` | Build time | No | Extra comma-separated hosts allowed through `next/image`. `res.cloudinary.com` is always allowed. |
 | `REVALIDATE_FAST` | Server only | No | Seconds before editor-facing content revalidates. Default `60`. |
 | `REVALIDATE_CONTENT` | Server only | No | Seconds before blogs/courses revalidate. Default `300`. |
@@ -67,7 +71,10 @@ app/
   brochures/[slug]/download/  outside the chrome, as in the React app
   not-found.tsx               global 404 (no header/footer)
   error.tsx                   route error boundary
-  robots.ts · sitemap.ts · *-sitemap.xml/route.ts
+  robots.ts                   one rule block, one sitemap
+  sitemap.xml/route.ts        the sitemap INDEX
+  sitemaps/*.xml/route.ts     pages, courses, blog, categories, locations,
+                              resources, compare
 
 components/
   site/                       Header, Footer, Logo, DemoModal, floating CTAs
@@ -81,10 +88,14 @@ components/
 lib/
   api/client.ts               HTTP client, envelope handling, cache policy
   api/services.ts             one typed method per backend resource
-  seo.ts                      Metadata builders (replaces the useSEO hook)
+  seo/canonical.ts            origin validation + canonical URL construction
+  seo/routes.ts               route registry (titles, indexability, sitemaps)
+  seo/archive.ts              blog pagination + filter policy
+  seo/sitemap.ts              sitemap XML builders and validators
+  seo/index.ts                Metadata builders (replaces the useSEO hook)
   schema.ts                   site-wide JSON-LD
   site-data.ts                server loaders + graceful-degradation wrapper
-  sitemap-data.ts             sitemap helpers
+  sitemap-data.ts             sitemap data loaders
   images.ts · contact.ts · courseNav.ts · analytics.ts · youtube.ts · blog/
 
 config/                       route tables that are not CMS content
@@ -151,20 +162,43 @@ The React app set its meta tags from a `useEffect` **after** hydration, so
 crawlers and social scrapers that don't run JavaScript saw only the generic tags
 baked into `index.html`. Every one of those tags is now emitted server-side.
 
-- `lib/seo.ts` reproduces the old `useSEO()` hook tag-for-tag through the
-  Metadata API: title, description, keywords, robots, canonical, Open Graph,
-  Twitter card.
+- `lib/seo/` is the whole SEO layer, and the only place that knows this site's
+  origin or how a URL is shaped:
+
+  | Module | Owns |
+  | --- | --- |
+  | `canonical.ts` | origin validation, path normalisation, query allow-list, absolute canonical URLs |
+  | `routes.ts` | the route registry — title, description, keywords, index/follow, sitemap membership and source-controlled `lastmod` for every fixed page |
+  | `archive.ts` | blog pagination and filter policy: what 404s, what may be indexed, what canonical to emit |
+  | `sitemap.ts` | XML builders, real-date handling, entry validation |
+  | `index.ts` | `buildMetadata()` — the old `useSEO()` hook, tag-for-tag |
+
+- Fixed pages call `staticPageMetadata('/about')`. Title, description, canonical
+  and sitemap membership all come from the registry, so a page, its sitemap
+  entry and `docs/SEO_INDEXABILITY_MATRIX.md` cannot drift apart.
 - `components/seo/JsonLd.tsx` renders page schema and `BreadcrumbList` into the
   server response. `<` is escaped so CMS content cannot break out of the script.
-- `rel="prev"` / `rel="next"` are real `<link>` elements on paginated archives.
+- `rel="prev"` / `rel="next"` are real `<link>` elements on clean paginated
+  archives (never on filtered ones).
 - Structured data: Organization, LocalBusiness, WebSite, FAQPage (site-wide);
   Course, BlogPosting, CollectionPage, ItemList, AboutPage, ContactPage and
   BreadcrumbList per page. FAQ schema is only emitted where matching visible
   content exists.
-- Sitemaps are generated from live backend data at `/sitemap.xml`,
-  `/blog-sitemap.xml`, `/category-sitemap.xml`, `/image-sitemap.xml` and
-  `/sitemap-index.xml` — the same paths the static files used.
-- Unknown slugs now return **HTTP 404** instead of a 200 with a "not found" body.
+- **One sitemap URL:** `/sitemap.xml`, a sitemap index over
+  `/sitemaps/{pages,courses,blog,categories,locations,resources,compare}.xml`.
+  Every `<lastmod>` is a real content date from the CMS or a source-controlled
+  constant — never `new Date()`. No `<priority>`, no `<changefreq>`.
+  The four sitemap URLs the React app published are 308-redirected, not deleted.
+- **Query parameters:** only `?page=` may appear on a canonical. `?q=`, `?tag=`
+  and `?sort=` render `noindex, follow` with no canonical, and are never listed
+  in a sitemap. Everything else (`utm_*`, `fbclid`, …) is stripped.
+- Unknown slugs return **HTTP 404**, and so does out-of-range or malformed
+  pagination — no empty 200 pages.
+- `npm test` includes a technical-SEO suite covering canonicals, sitemap
+  validity, indexability and the pagination rules.
+
+Reference documents: `docs/SEO_PHASE_1_AUDIT.md`,
+`docs/SEO_INDEXABILITY_MATRIX.md`, `docs/SEO_REDIRECT_MAP.md`.
 
 ---
 
@@ -245,6 +279,19 @@ Set `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_SITE_URL` in the host's
 dashboard. `vercel.json` is no longer needed — headers, redirects and rewrites
 all live in `next.config.mjs`.
 
+On the production project `NEXT_PUBLIC_SITE_URL` must be exactly
+`https://glorytecks.com`. It is inlined at build time, so a change needs a
+redeploy. Before pointing the domain at a deployment, and after every production
+deploy, run the smoke test against it — canonicals are held to
+`https://glorytecks.com` whichever host is fetched:
+
+```bash
+SEO_SMOKE_BASE_URL=https://<deployment>.vercel.app npm run test:smoke
+SEO_SMOKE_BASE_URL=https://glorytecks.com npm run test:smoke
+```
+
+See `docs/SEO_PRODUCTION_PARITY_REPORT.md` for why this exists.
+
 If the backend is unreachable during a build, the build still succeeds: static
 generation is skipped for the affected routes and they render on demand once the
 backend recovers. A deploy-time blip degrades to slower first requests rather
@@ -267,6 +314,14 @@ backend's Redis cache was not invalidated on save — that is a backend concern.
 
 **Canonical URLs point at localhost.** `NEXT_PUBLIC_SITE_URL` is unset on that
 environment.
+
+**Canonical URLs point at a `*.vercel.app` host, or robots.txt says
+`Disallow: /`.** `NEXT_PUBLIC_SITE_URL` on that Vercel environment is not
+`https://glorytecks.com`. Fix the variable and redeploy.
+
+**The live domain still shows the old site.** The domain is attached to a
+different Vercel project. `npm run test:smoke` reports "served by the legacy
+Vite SPA" on every page.
 
 **A page 404s that should exist.** Confirm the record's `status` is `published`
 in the admin. Draft and archived content is excluded by the public API.

@@ -35,6 +35,7 @@ import type {
   Brochure,
   Batch,
 } from '@/types';
+import { htmlToSections, sectionsToHtml } from '@/features/legalUtils';
 
 const STATUS_OPTIONS = [
   { label: 'Draft', value: 'draft' },
@@ -343,23 +344,139 @@ export const legalConfig: ResourceConfig<LegalDoc> = {
   endpoint: '/legal',
   singular: 'Legal Page',
   plural: 'Legal Pages',
-  description: 'Policy and legal documents (privacy, terms, refund).',
+  description: 'Policy and legal documents managed from the GloryTecks website.',
   icon: Scale,
   defaultSort: 'title',
   defaultOrder: 'asc',
   dialogWide: true,
+
   columns: [
-    { key: 'title', header: 'Title', sortable: true, render: (d) => <span className="font-medium">{d.title}</span> },
-    { key: 'slug', header: 'Slug', render: (d) => <span className="font-mono text-xs text-muted-foreground">{d.slug}</span> },
-    { key: 'status', header: 'Status', render: (d) => <StatusBadge status={d.status} /> },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      render: (d) => (
+        <span className="font-medium">{d.title}</span>
+      ),
+    },
+    {
+      key: 'slug',
+      header: 'Slug',
+      render: (d) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {d.slug}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (d) => (
+        <StatusBadge status={d.status} />
+      ),
+    },
   ],
+
   fields: [
-    { name: 'title', label: 'Title', type: 'text', required: true, colSpan: 1 },
-    { name: 'slug', label: 'Slug', type: 'slug', slugFrom: 'title', colSpan: 1 },
-    { name: 'updatedLabel', label: 'Last updated label', type: 'text', colSpan: 1, placeholder: 'January 2026' },
-    { name: 'status', label: 'Status', type: 'select', options: STATUS_OPTIONS, colSpan: 1, defaultValue: 'published' },
-    { name: 'body', label: 'Body (HTML or Markdown)', type: 'richtext' },
+    {
+      name: 'title',
+      label: 'Title',
+      type: 'text',
+      required: true,
+      colSpan: 1,
+    },
+
+    {
+      name: 'slug',
+      label: 'Slug',
+      type: 'slug',
+      slugFrom: 'title',
+      readOnlyOnEdit: true,
+      colSpan: 1,
+    },
+
+    {
+      name: 'updated',
+      label: 'Last updated',
+      type: 'text',
+      colSpan: 1,
+      placeholder: '2026-10-03',
+    },
+
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      options: STATUS_OPTIONS,
+      colSpan: 1,
+      defaultValue: 'published',
+    },
+
+    {
+      name: 'metaTitle',
+      label: 'Meta title',
+      type: 'text',
+      colSpan: 2,
+    },
+
+    {
+      name: 'metaDescription',
+      label: 'Meta description',
+      type: 'textarea',
+      colSpan: 2,
+    },
+
+    {
+      name: 'intro',
+      label: 'Introduction',
+      type: 'textarea',
+      colSpan: 2,
+    },
+
+    {
+      name: 'body',
+      label: 'Body (HTML)',
+      type: 'richtext',
+      colSpan: 2,
+      hint:
+        'Use headings (h2/h3), paragraphs (p), and lists (ul/ol). The content is converted to sections before saving.',
+    },
   ],
+
+  prepareEdit: (record) => ({
+    title: record.title ?? '',
+    slug: record.slug ?? '',
+    updated: record.updated ?? '',
+    status: record.status ?? 'published',
+    metaTitle: record.metaTitle ?? '',
+    metaDescription: record.metaDescription ?? '',
+    intro: record.intro ?? '',
+    body: sectionsToHtml(record.sections ?? []),
+  }),
+
+  prepareSubmit: (values, mode) => {
+    const body =
+      typeof values.body === 'string'
+        ? values.body
+        : '';
+
+    const payload: Record<string, unknown> = {
+      title: values.title,
+      status: values.status,
+      updated: values.updated,
+      metaTitle: values.metaTitle,
+      metaDescription: values.metaDescription,
+      intro: values.intro,
+      sections: htmlToSections(body),
+    };
+
+    // Slugs are immutable after creation.
+    if (mode === 'create') {
+      payload.slug = values.slug;
+    }
+
+    return payload;
+  },
 };
 
 export const galleryConfig: ResourceConfig<GalleryItem> = {

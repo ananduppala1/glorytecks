@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { blogPath } from '@/lib/blog/merged';
 import { Sparkles, Flame, LayoutGrid, Search, TrendingUp, BookOpen, Tag, X } from 'lucide-react';
 import { BlogCard } from '@/components/blog/BlogCard';
 import { BlogPagination } from '@/components/blog/BlogPagination';
@@ -6,15 +7,23 @@ import { BlogToolbar } from '@/components/blog/BlogToolbar';
 import { ErrorState } from '@/components/common/states';
 import { safe } from '@/lib/site-data';
 import * as api from '@/lib/api/services';
+import { parsePageParam, type PageParam, type SortKey } from '@/lib/seo/archive';
 import type { BlogPost, CategoryKnowledge } from '@/types/content';
 
 /** Professional pagination: 6 articles per page — unchanged from the React app. */
 export const PAGE_SIZE = 6;
 
-export type SortKey = 'latest' | 'popular';
+export type { SortKey };
 
 export interface BlogArchiveParams {
+  /** Resolved page number (1 when the parameter is absent or malformed). */
   page: number;
+  /**
+   * The raw parse result. The route uses it to tell "no ?page= at all" from
+   * "?page=abc", which must 404 rather than silently serve page 1 at a second
+   * URL — see lib/seo/archive.ts.
+   */
+  pageParam: PageParam;
   q: string;
   tag: string;
   sort: SortKey;
@@ -22,14 +31,18 @@ export interface BlogArchiveParams {
 
 /**
  * Normalise the URL search params into the shape the backend expects.
- * `page` is clamped to a sane positive integer so a hand-edited URL cannot ask
- * the backend for page -3.
+ *
+ * Page parsing lives in `lib/seo/archive.ts` so the SEO tests can exercise it
+ * without React. A malformed value is reported rather than coerced: the route
+ * turns it into a 404 instead of rendering page 1 under a URL that should not
+ * exist.
  */
 export function parseArchiveParams(sp: Record<string, string | string[] | undefined>): BlogArchiveParams {
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
-  const rawPage = parseInt(one(sp.page) || '1', 10);
+  const pageParam = parsePageParam(sp.page);
   return {
-    page: Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1,
+    page: pageParam.ok ? pageParam.page : 1,
+    pageParam,
     q: one(sp.q).trim(),
     tag: one(sp.tag).trim(),
     sort: one(sp.sort) === 'popular' ? 'popular' : 'latest',
@@ -212,7 +225,7 @@ export function BlogArchive({
                   {trending.map((post, i) => (
                     <Link
                       key={post.slug}
-                      href={`/blog/${post.slug}`}
+                      href={blogPath(post.slug)}
                       className="group flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3 transition-all hover:border-primary/40"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
@@ -232,32 +245,9 @@ export function BlogArchive({
               </div>
             )}
 
+
             {/* ── Toolbar: count + active tag + sort ───────────────────────── */}
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <LayoutGrid className="h-4 w-4" />
-                <span>
-                  {totalPosts} {totalPosts === 1 ? 'article' : 'articles'}
-                  {params.q && <> for &ldquo;{params.q}&rdquo;</>}
-                  {activeCategory && <> in {activeCategory.name}</>}
-                  {totalPages > 1 && (
-                    <>
-                      {' '}
-                      · Page {currentPage} of {totalPages}
-                    </>
-                  )}
-                </span>
-                {params.tag && (
-                  <Link
-                    href={clearTagUrl}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                    aria-label={`Remove tag filter ${params.tag}`}
-                  >
-                    <Tag className="h-3 w-3" /> #{params.tag}
-                    <X className="h-3 w-3" />
-                  </Link>
-                )}
-              </div>
               <div
                 className="flex items-center gap-1 rounded-lg border border-border bg-card p-1"
                 role="group"

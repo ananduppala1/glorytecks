@@ -1,7 +1,5 @@
-"use client";
-
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 import { ArrowRight, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Comparison } from "@/types/content";

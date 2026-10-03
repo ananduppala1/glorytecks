@@ -238,12 +238,25 @@ export interface Locality extends BaseDoc {
   order?: number;
 }
 
+export interface LegalSection {
+  heading: string;
+  paragraphs?: string[];
+  bullets?: string[];
+}
+
 export interface LegalDoc extends BaseDoc {
   slug: string;
   title: string;
-  body?: string;
-  updatedLabel?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  updated?: string;
+  intro?: string;
+  sections: LegalSection[];
   status: ContentStatus;
+
+  // Admin-only compatibility fields.
+  // These are converted before saving and are NOT stored in Supabase.
+  body?: string;
 }
 
 export interface GalleryItem extends BaseDoc {

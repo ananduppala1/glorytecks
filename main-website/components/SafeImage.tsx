@@ -1,5 +1,5 @@
 import Image, { type ImageProps } from 'next/image';
-import { canOptimise } from '@/lib/images';
+import { canOptimise, cloudinaryLoader, isCloudinaryUrl } from '@/lib/images';
 import { safeUrl } from '@/lib/safeUrl';
 
 type SafeImageProps = Omit<ImageProps, 'src'> & {
@@ -57,6 +57,14 @@ export function SafeImage({ src, fallbackSrc, alt, ...props }: SafeImageProps) {
         {...(rest as Record<string, unknown>)}
       />
     );
+  }
+
+  // Cloudinary already optimises and serves from its own CDN. Routing those
+  // URLs through Vercel's optimizer pays twice and burns the Hobby plan's
+  // monthly source-image quota, so they get Cloudinary's transformation
+  // pipeline via a custom loader instead. See lib/images.ts.
+  if (typeof resolved === 'string' && isCloudinaryUrl(resolved)) {
+    return <Image src={resolved} alt={alt} loader={cloudinaryLoader} {...props} />;
   }
 
   return <Image src={resolved} alt={alt} {...props} />;

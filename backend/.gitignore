@@ -13,3 +13,5 @@ data.txt
 supabase/.branches
 supabase/.temp
 
+backups/
+content/

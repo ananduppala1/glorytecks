@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import ComparisonView from "@/components/views/ComparisonView";
 import Breadcrumbs from "@/components/site/Breadcrumbs";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { buildMetadata, breadcrumbSchema, SITE_URL } from "@/lib/seo";
+import { buildMetadata, notFoundMetadata, breadcrumbSchema, SITE_URL } from "@/lib/seo";
+import { SCHEMA_ID, ref } from "@/lib/schema";
 import { safe } from "@/lib/site-data";
 import * as api from "@/lib/api/services";
 import { ApiError } from "@/lib/api/client";
@@ -32,13 +33,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const cmp = await getComparison(slug);
 
+  // No canonical on a 404 — see the note in /courses/[slug].
   if (!cmp) {
-    return buildMetadata({
-      title: "Comparison | GloryTecks Hyderabad",
-      description: "Side-by-side course and tool comparisons from GloryTecks Hyderabad.",
-      canonical: "/compare",
-      noindex: true,
-    });
+    return notFoundMetadata(
+      "Comparison Not Found | GloryTecks Hyderabad",
+      "This comparison does not exist.",
+    );
   }
 
   return buildMetadata({
@@ -47,7 +47,6 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       describe(cmp.intro ?? "") ||
       "Side-by-side course and tool comparisons from GloryTecks Hyderabad.",
     canonical: `/compare/${cmp.slug}`,
-    keywords: `${cmp.itemA} vs ${cmp.itemB}, ${cmp.itemA.toLowerCase()} or ${cmp.itemB.toLowerCase()}, ${cmp.itemA.toLowerCase()} vs ${cmp.itemB.toLowerCase()} hyderabad`,
   });
 }
 
@@ -78,12 +77,8 @@ export default async function ComparisonPage({ params }: { params: Params }) {
       { "@type": "Thing", name: cmp.itemA },
       { "@type": "Thing", name: cmp.itemB },
     ],
-    author: { "@type": "Organization", name: "GloryTecks" },
-    publisher: {
-      "@type": "Organization",
-      name: "GloryTecks",
-      logo: { "@type": "ImageObject", url: `${SITE_URL}/logo.png` },
-    },
+    author: ref(SCHEMA_ID.organization),
+    publisher: ref(SCHEMA_ID.organization),
     mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE_URL}${canonical}` },
   };
 

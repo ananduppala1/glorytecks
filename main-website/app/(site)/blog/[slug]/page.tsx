@@ -28,7 +28,11 @@ import {
 } from '@/components/blog/BlogPostIslands';
 import { Button } from '@/components/ui/button';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { buildMetadata, breadcrumbSchema, SITE_URL } from '@/lib/seo';
+import { buildMetadata, notFoundMetadata, breadcrumbSchema, SITE_URL } from '@/lib/seo';
+import { SCHEMA_ID, ref } from '@/lib/schema';
+import { blogPath, isNoindexArticle } from '@/lib/blog/merged';
+import { SalaryDisclosure, hasSalaryContent } from '@/components/blog/SalaryDisclosure';
+import { safeUrl } from '@/lib/safeUrl';
 import { tableOfContents, estimateReadTime, collectFaq } from '@/lib/blog/blocks';
 import { whatsappLink } from '@/lib/contact';
 import { safe } from '@/lib/site-data';
@@ -82,22 +86,28 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const post = await getPost(slug);
 
+  // No canonical on a 404 — see the note in /courses/[slug].
   if (!post) {
-    return buildMetadata({
-      title: 'Blog Post | GloryTecks',
-      description: 'GloryTecks blog.',
-      canonical: '/blog',
-      noindex: true,
-    });
+    return notFoundMetadata('Blog Post Not Found | GloryTecks', 'This article does not exist.');
   }
 
+  // Articles on the noindex list stay published and crawlable but are held
+  // out of the index — the tranche mechanism in docs/BLOG_CONTENT_ACTION_PLAN.md
+  // §3. `follow` is kept so their links still flow to the cluster hub.
+  const heldBack = isNoindexArticle(post.slug);
+
   return buildMetadata({
+    ...(heldBack ? { index: false, follow: true } : {}),
     title: `${post.title} | GloryTecks Blog`,
     description: post.metaDescription || post.excerpt || 'GloryTecks blog.',
     canonical: `/blog/${post.slug}`,
-    keywords: `${post.tags.join(', ')}, ${post.category} Hyderabad, GloryTecks`,
     ogType: 'article',
-    ogImage: `${SITE_URL}/blog-assets/${post.categorySlug}-cover.svg`,
+    // The post's own featured image when the CMS has one, otherwise the site
+    // default. It previously pointed at /blog-assets/{category}-cover.svg,
+    // which is wrong twice over: BlogCover renders an inline <svg> and never
+    // loads that file, and Facebook, X and LinkedIn all refuse to render an
+    // SVG og:image — so every shared article showed no preview at all.
+    ogImage: safeUrl(post.featuredImage),
   });
 }
 
@@ -154,6 +164,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
     '@id': `${url}#blogposting`,
     headline: post.title,
     description: post.metaDescription || post.excerpt,
+    image: post.featuredImage ? [post.featuredImage] : undefined,
     url,
     datePublished: post.date,
     dateModified: post.updated || post.date,
@@ -169,15 +180,14 @@ export default async function BlogPostPage({ params }: { params: Params }) {
       )
       .reduce((a, c) => a + c, 0),
     inLanguage: 'en-IN',
+    // With no named author the post is authored by the organization itself —
+    // referenced by @id, not re-described as a second, unlinked Organization.
     author: author
       ? { '@type': 'Person', name: author.name, description: author.role }
-      : { '@type': 'Organization', name: 'GloryTecks' },
-    publisher: {
-      '@type': 'Organization',
-      name: 'GloryTecks',
-      url: SITE_URL,
-      logo: { '@type': 'ImageObject', url: `${SITE_URL}/favicon.ico` },
-    },
+      : ref(SCHEMA_ID.organization),
+    // One organization node for the whole site; the logo it carries is the
+    // real 256x244 logo, not the favicon this used to point at.
+    publisher: ref(SCHEMA_ID.organization),
     mainEntityOfPage: { '@type': 'WebPage', '@id': url },
     isPartOf: { '@id': `${SITE_URL}/blog#webpage` },
   };
@@ -286,7 +296,9 @@ export default async function BlogPostPage({ params }: { params: Params }) {
                 slug={post.slug}
                 categorySlug={post.categorySlug}
                 title={post.title}
+                featuredImage={post.featuredImage}
                 rounded={false}
+                priority
                 className="aspect-[16/8] w-full"
                 categoryColor={category?.color}
                 categoryName={category?.name}
@@ -305,6 +317,9 @@ export default async function BlogPostPage({ params }: { params: Params }) {
             {/* Body */}
             <div className="mt-8">
               <BlogContent blocks={blocks} />
+              {/* Salary figures need a stated year and provenance — see
+                  components/blog/SalaryDisclosure.tsx. */}
+              {hasSalaryContent(blocks) && <SalaryDisclosure />}
             </div>
 
             {/* Tags */}
@@ -358,7 +373,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
               <div className="mt-10 grid gap-4 sm:grid-cols-2">
                 {prev ? (
                   <Link
-                    href={`/blog/${prev.slug}`}
+                    href={blogPath(prev.slug)}
                     className="group rounded-xl border border-border bg-card/40 p-4 transition-all hover:border-primary/40"
                   >
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -373,7 +388,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
                 )}
                 {next ? (
                   <Link
-                    href={`/blog/${next.slug}`}
+                    href={blogPath(next.slug)}
                     className="group rounded-xl border border-border bg-card/40 p-4 text-right transition-all hover:border-primary/40"
                   >
                     <span className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
@@ -460,7 +475,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
                   <ul className="space-y-3">
                     {popular.map((p, i) => (
                       <li key={p.slug}>
-                        <Link href={`/blog/${p.slug}`} className="group flex gap-3">
+                        <Link href={blogPath(p.slug)} className="group flex gap-3">
                           <span className="text-sm font-bold text-primary/70">
                             {String(i + 1).padStart(2, '0')}
                           </span>
@@ -483,7 +498,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
                   <ul className="space-y-3">
                     {latest.map((p) => (
                       <li key={p.slug}>
-                        <Link href={`/blog/${p.slug}`} className="group block">
+                        <Link href={blogPath(p.slug)} className="group block">
                           <span className="line-clamp-2 text-sm text-muted-foreground transition-colors group-hover:text-primary">
                             {p.title}
                           </span>

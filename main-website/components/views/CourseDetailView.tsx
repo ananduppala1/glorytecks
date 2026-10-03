@@ -1,7 +1,15 @@
 "use client";
 
+// Still a Client Component, but no longer because of an animation library.
+// It reads contact details from the SiteDataProvider React context via
+// useContactInfo(). Framer Motion is gone (see components/ui/reveal.tsx), so
+// the JS this now ships is its own logic rather than 62 KB of animation
+// runtime. To finish the conversion, the page would pass the derived contact
+// info down as a prop instead of reading context — tracked in
+// docs/PERFORMANCE_AUDIT.md.
+
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 
 
 import {
@@ -258,20 +266,32 @@ const CourseDetailView = ({ course, allCourses }: CourseDetailViewProps) => {
           </div>
         </motion.div>
       </motion.section>
-      {/* FREQUENTLY ASKED QUESTIONS (visible — matches FAQ schema) */}
-      <motion.section className="container-px mx-auto max-w-4xl pb-20" {...smoothReveal}>
-        <h2 className="text-2xl md:text-3xl font-bold mb-6">
-          {course.title} Course in Hyderabad — Frequently Asked Questions
-        </h2>
-        <Accordion type="single" collapsible className="w-full">
-          {(course.faqs ?? []).map((f, i) => (
-            <AccordionItem key={i} value={`faq-${i}`}>
-              <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
-              <AccordionContent className="text-foreground/80">{f.a}</AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      </motion.section>
+      {/*
+        Rendered only when the course actually has FAQs in the CMS.
+
+        Previously the heading rendered unconditionally over an empty
+        accordion — no course currently has FAQs — while
+        <CourseFaqSchema> published five hardcoded questions as FAQPage
+        markup. So every course page offered rich-results FAQ data for
+        questions that appeared nowhere on it, under a heading with nothing
+        beneath it. The schema now follows this list, and both disappear
+        together when there is nothing to show.
+      */}
+      {(course.faqs?.length ?? 0) > 0 && (
+        <motion.section className="container-px mx-auto max-w-4xl pb-20" {...smoothReveal}>
+          <h2 className="text-2xl md:text-3xl font-bold mb-6">
+            Frequently asked questions
+          </h2>
+          <Accordion type="single" collapsible className="w-full">
+            {(course.faqs ?? []).map((f, i) => (
+              <AccordionItem key={i} value={`faq-${i}`}>
+                <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
+                <AccordionContent className="text-foreground/80">{f.a}</AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </motion.section>
+      )}
 
       {/* RELATED COURSES (internal linking) */}
       <motion.section className="container-px mx-auto max-w-7xl pb-24" {...smoothReveal}>

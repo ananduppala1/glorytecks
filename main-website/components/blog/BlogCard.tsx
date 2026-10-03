@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import { blogPath } from "@/lib/blog/merged";
 import { Clock, ArrowRight, Calendar } from "lucide-react";
 import { BlogCover } from "./BlogCover";
 import { AuthorAvatar } from "./AuthorAvatar";
@@ -19,13 +20,13 @@ function fmtDate(iso: string) {
   }
 }
 
-// `priority` is accepted for API parity (featured card = LCP candidate) but covers
-// are inline SVG, so no fetch-priority hint is needed.
+// `priority` is forwarded to a real featured image when one is available, so the
+// featured card can remain the LCP candidate without penalising lazy thumbnails.
 export const BlogCard = memo(function BlogCard({ post, priority: _priority = false }: { post: BlogPost; priority?: boolean }) {
   const author = post.author;
   return (
     <Link
-      href={`/blog/${post.slug}`}
+      href={blogPath(post.slug)}
       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] transition-all card-hover hover:border-primary/40"
     >
       <div className="relative aspect-[16/9] overflow-hidden">
@@ -33,7 +34,9 @@ export const BlogCard = memo(function BlogCard({ post, priority: _priority = fal
           slug={post.slug}
           categorySlug={post.categorySlug}
           title={post.title}
+          featuredImage={post.featuredImage}
           rounded={false}
+          priority={_priority}
           className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]"
         />
         <span className="absolute left-3 top-3 rounded-full border border-primary/30 bg-background/80 px-2.5 py-1 text-xs font-medium text-primary backdrop-blur">

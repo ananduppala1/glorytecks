@@ -267,13 +267,37 @@ const legal = schema(LEGAL_FIELDS, (req) => [
   str('updated', { max: 60 }),
   str('intro', { max: LIMITS.TEXT }),
   objArray('sections', { maxItems: LIMITS.LIST_ITEMS }),
-  body('sections.*.heading').optional().isString().trim().isLength({ max: LIMITS.TITLE }),
-  body('sections.*.body').optional().isString().trim().isLength({ max: LIMITS.BLOCK_TEXT }),
-  body('sections.*.items')
+  body('sections.*.heading')
+  .optional()
+  .isString()
+  .trim()
+  .isLength({ max: LIMITS.TITLE }),
+
+  body('sections.*.paragraphs')
     .optional()
     .isArray({ max: LIMITS.LIST_ITEMS })
-    .withMessage(`A section may list at most ${LIMITS.LIST_ITEMS} items`),
-  body('sections.*.items.*').optional().isString().trim().isLength({ max: LIMITS.SUMMARY }),
+    .withMessage(
+      `A section may contain at most ${LIMITS.LIST_ITEMS} paragraphs`,
+    ),
+
+  body('sections.*.paragraphs.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: LIMITS.BLOCK_TEXT }),
+
+  body('sections.*.bullets')
+    .optional()
+    .isArray({ max: LIMITS.LIST_ITEMS })
+    .withMessage(
+      `A section may contain at most ${LIMITS.LIST_ITEMS} bullets`,
+    ),
+
+  body('sections.*.bullets.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: LIMITS.SUMMARY }),
   enumField('status', ALL_CONTENT_STATUS),
 ], ['updatedLabel', 'body']);
 

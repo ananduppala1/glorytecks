@@ -1,7 +1,5 @@
-"use client";
-
 import { Briefcase, TrendingUp, Users, Star, ArrowRight, Award } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from '@/components/ui/reveal';
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/site/PageHeader";
